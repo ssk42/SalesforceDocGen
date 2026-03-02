@@ -90,14 +90,15 @@
                                 </lightning-input>
                             </div>
                             <div class="slds-col slds-size_1-of-12 slds-grid slds-grid_vertical-align-end">
-                                <lightning-button-icon
+                                <lightning-button
                                     icon-name="utility:delete"
-                                    alternative-text="Remove signer"
-                                    variant="bare"
+                                    label="Remove"
+                                    title="Remove signer"
+                                    variant="destructive-text"
                                     data-index={index}
                                     onclick={handleRemoveSigner}
                                     disabled={isRemoveDisabled}>
-                                </lightning-button-icon>
+                                </lightning-button>
                             </div>
                         </div>
                     </div>
@@ -149,13 +150,15 @@
                             </p>
                         </div>
                         <div class="slds-col slds-no-flex">
-                            <lightning-button-icon
+                            <lightning-button
                                 icon-name="utility:copy"
-                                alternative-text="Copy link"
+                                label="Copy"
+                                title="Copy link"
+                                variant="neutral"
                                 data-url={result.signerUrl}
                                 onclick={handleCopyUrl}
                                 class="slds-var-m-left_small">
-                            </lightning-button-icon>
+                            </lightning-button>
                         </div>
                     </div>
                 </div>
@@ -218,13 +221,14 @@
                                             </p>
                                         </div>
                                         <div class="slds-col slds-no-flex">
-                                            <lightning-button-icon
+                                            <lightning-button
                                                 icon-name="utility:copy"
-                                                alternative-text="Copy link"
+                                                label="Copy"
+                                                title="Copy link"
+                                                variant="neutral"
                                                 data-url={signer.signerUrl}
-                                                onclick={handleCopyPreviousUrl}
-                                                size="small">
-                                            </lightning-button-icon>
+                                                onclick={handleCopyPreviousUrl}>
+                                            </lightning-button>
                                         </div>
                                     </div>
                                 </div>

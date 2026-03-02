@@ -54,14 +54,13 @@
                                     <lightning-progress-bar value={jobProgress.percent} variant="circular"></lightning-progress-bar>
                                     <div class="slds-grid slds-grid_align-spread slds-var-m-top_xx-small">
                                         <p class="slds-text-body_small">Processing records...</p>
-                                        <lightning-button-icon 
-                                            icon-name="utility:refresh" 
-                                            variant="border-filled" 
-                                            size="small" 
-                                            onclick={pollJob} 
-                                            alternative-text="Refresh Status" 
+                                        <lightning-button
+                                            icon-name="utility:refresh"
+                                            variant="neutral"
+                                            onclick={pollJob}
+                                            label="Refresh"
                                             title="Refresh Status">
-                                        </lightning-button-icon>
+                                        </lightning-button>
                                     </div>
                                 </div>
                             </template>
@@ -111,7 +110,7 @@
                             <div class="slds-box slds-box_x-small slds-theme_default">
                                 <div class="slds-grid slds-grid_align-spread slds-var-m-bottom_x-small">
                                     <h3 class="slds-text-heading_small">Saved Queries</h3>
-                                    <lightning-button-icon icon-name="utility:add" onclick={openSaveModal} alternative-text="Save Current Query" title="Save Current Query"></lightning-button-icon>
+                                    <lightning-button icon-name="utility:add" onclick={openSaveModal} label="Save" title="Save Current Query" variant="neutral"></lightning-button>
                                 </div>
                                 <template if:false={savedQueries.length}>
                                     <p class="slds-text-color_weak slds-text-body_small">No saved queries for this template.</p>
@@ -123,7 +122,7 @@
                                                 <div class="slds-truncate" title={q.Description__c}>
                                                     <a onclick={handleLoadQuery} data-id={q.Id}>{q.Name}</a>
                                                 </div>
-                                                <lightning-button-icon icon-name="utility:delete" variant="bare" size="small" onclick={handleDeleteQuery} data-id={q.Id}></lightning-button-icon>
+                                                <lightning-button icon-name="utility:delete" variant="destructive-text" label="Delete" onclick={handleDeleteQuery} data-id={q.Id} title="Delete query"></lightning-button>
                                             </div>
                                         </li>
                                     </template>
@@ -168,7 +167,7 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={closeSaveModal}>
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" aria-label="Close" onclick={closeSaveModal}>
                         <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
                     </button>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Save Query</h2>

@@ -14,12 +14,13 @@
                             </lightning-input>
                         </div>
                         <div class="slds-col slds-var-p-left_small">
-                            <lightning-button-icon 
-                                icon-name="utility:refresh" 
-                                onclick={handleRefresh} 
-                                alternative-text="Refresh Templates" 
-                                title="Refresh Templates">
-                            </lightning-button-icon>
+                            <lightning-button
+                                icon-name="utility:refresh"
+                                onclick={handleRefresh}
+                                label="Refresh"
+                                title="Refresh Templates"
+                                variant="neutral">
+                            </lightning-button>
                         </div>
                     </div>
                     <lightning-datatable
@@ -136,7 +137,7 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_large">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={closeEditModal}>
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" aria-label="Close" onclick={closeEditModal}>
                         <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
                     </button>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Edit / View Template</h2>
@@ -159,7 +160,7 @@
                                         value={editTemplateTitleFormat}
                                         query-config={editTemplateQuery}
                                         onchange={handleTitleFormatChange}
-                                        class="slds-var-m-top_small slds-d-block">
+                                        class="slds-var-m-top_small slds-show">
                                     </c-doc-gen-title-editor>
                                 </div>
                             </div>
@@ -343,7 +344,7 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_small">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={closePreviewModal}>
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" aria-label="Close" onclick={closePreviewModal}>
                         <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
                     </button>
                     <h2 class="slds-text-heading_medium">Version Preview: {previewVersion.VersionNumber}</h2>
@@ -389,7 +390,7 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={handleCloseSharing}>
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" aria-label="Close" onclick={handleCloseSharing}>
                         <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
                     </button>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Share Template</h2>
