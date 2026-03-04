@@ -166,7 +166,7 @@ private class DocGenMiscTests {
                 String xml = zr.extract(entry).toString();
                 System.assert(xml.contains('myConsumerKey'), 'Auth provider should contain the consumer key');
                 System.assert(xml.contains('myConsumerSecret'), 'Auth provider should contain the consumer secret');
-                System.assert(xml.contains('<isPkceEnabled>false</isPkceEnabled>'), 'PKCE should be disabled');
+                System.assert(xml.contains('<isPkceEnabled>true</isPkceEnabled>'), 'PKCE should be enabled');
             }
             if (entry.getName() == 'namedCredentials/DocGen_Loopback.namedCredential-meta.xml') {
                 String xml = zr.extract(entry).toString();

@@ -2,7 +2,7 @@
 
 **A free, native, production-ready document engine for Salesforce.**
 
-[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)](#quick-install)
+[![Version](https://img.shields.io/badge/version-0.9.1-blue.svg)](#quick-install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 
@@ -20,22 +20,27 @@ This project gives you a professional-grade document engine -- template manageme
 
 ## Quick Install
 
-**Subscriber Package Version ID**: `04tdL000000OpPZQA0`
+**Subscriber Package Version ID**: `04tdL000000Or6PQAS`
 
 **CLI:**
 ```bash
-sf package install --package 04tdL000000OpPZQA0 --wait 10 --installation-key-bypass
+sf package install --package 04tdL000000Or6PQAS --wait 10 --installation-key-bypass
 ```
 
 **Browser:**
-- [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000OpPZQA0)
-- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000OpPZQA0)
+- [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Or6PQAS)
+- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Or6PQAS)
 
 > Select **Install for Admins Only** during installation, then assign permission sets to your users afterward.
 
 ---
 
-## What's New in v0.9.0
+## What's New in v0.9.1
+
+- **PKCE Auth Fix** -- Fixed Auth Provider provisioning to correctly enable PKCE (Proof Key for Code Exchange), matching the required OAuth configuration for External Client Apps.
+- **Wizard UX Improvements** -- Added 10-minute propagation delay warning after credential provisioning. Split post-provision instructions into clear sections for authenticating the connection and granting External Credential Principal Access to permission sets.
+
+### v0.9.0
 
 - **One-Click Credential Provisioning** -- New "Provision Credentials" button in the setup wizard automatically deploys Auth Provider, External Credential, and Named Credential metadata via the SOAP Metadata API. Admins enter their Consumer Key/Secret and click one button instead of manually configuring 15+ settings across 3 Setup screens.
 - **Streamlined Setup Wizard** -- Setup wizard reduced from 4 steps to 3. Steps 2 and 3 (Auth Provider + Named Credential) are now a single automated "Provision & Authenticate" step.
@@ -256,7 +261,7 @@ Go to **Setup > Permission Sets**, open the appropriate set, and click **Manage 
 1. Navigate to the **DocGen Setup** tab in the DocGen app
 2. Follow the 3-step wizard:
    - **Step 1:** Create an External Client App named "DocGen Loopback" with OAuth scopes `api` and `refresh_token`
-   - **Step 2:** Paste your Consumer Key/Secret and click **Provision Credentials** -- the Auth Provider, External Credential, and Named Credential are created automatically. Then click **Authenticate** to authorize the named principal.
+   - **Step 2:** Paste your Consumer Key/Secret and click **Provision Credentials** -- the Auth Provider, External Credential, and Named Credential are created automatically. Wait up to 10 minutes for propagation, then click **Authenticate** to authorize the named principal. Finally, grant **External Credential Principal Access** to both DocGen Admin and DocGen User permission sets.
    - **Step 3:** Configure your Salesforce Site URL for public signature links
 3. Assign the `DocGen Admin` and `DocGen User` permission sets to the Named Credential's External Credential principal
 

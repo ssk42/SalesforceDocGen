@@ -1,8 +1,8 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v0.9.0 - One-Click Provision",
-      "versionNumber": "0.9.0.NEXT",
+      "versionName": "v0.9.1 - PKCE Fix & Wizard UX",
+      "versionNumber": "0.9.1.NEXT",
       "path": "force-app",
       "default": true,
       "package": "Document Generation",
@@ -29,6 +29,7 @@
     "Document Generation@0.7.0-1": "04tdL000000OowXQAS",
     "Document Generation@0.8.0-1": "04tdL000000OpCfQAK",
     "Document Generation@0.8.0-2": "04tdL000000OpEHQA0",
-    "Document Generation@0.9.0-1": "04tdL000000OpPZQA0"
+    "Document Generation@0.9.0-1": "04tdL000000OpPZQA0",
+    "Document Generation@0.9.1-1": "04tdL000000Or6PQAS"
   }
 }

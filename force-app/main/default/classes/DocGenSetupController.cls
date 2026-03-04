@@ -79,7 +79,7 @@ public with sharing class DocGenSetupController {
             '    <defaultScopes>api refresh_token</defaultScopes>\n' +
             '    <friendlyName>DocGen Auth Provider</friendlyName>\n' +
             '    <includeOrgIdInIdentifier>true</includeOrgIdInIdentifier>\n' +
-            '    <isPkceEnabled>false</isPkceEnabled>\n' +
+            '    <isPkceEnabled>true</isPkceEnabled>\n' +
             '    <providerType>Salesforce</providerType>\n' +
             '    <requireMfa>false</requireMfa>\n' +
             '    <sendAccessTokenInHeader>false</sendAccessTokenInHeader>\n' +
