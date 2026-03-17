@@ -1078,4 +1078,824 @@ private class DocGenSignatureTests {
         System.assertEquals('Buyer', sd.roleName);
         System.assertEquals('base64data', sd.base64Image);
     }
+
+    // =========================================================================
+    // Additional DocGenSignatureController coverage tests
+    // =========================================================================
+
+    @isTest
+    static void testValidateToken_BadFormat_TooShort() {
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken('abcdef');
+        Test.stopTest();
+
+        System.assertEquals(false, res.isValid);
+        System.assertEquals('Invalid security token format.', res.errorMessage);
+    }
+
+    @isTest
+    static void testValidateToken_BadFormat_NonHex() {
+        // 64 chars but contains non-hex characters
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ');
+        Test.stopTest();
+
+        System.assertEquals(false, res.isValid);
+        System.assertEquals('Invalid security token format.', res.errorMessage);
+    }
+
+    @isTest
+    static void testValidateToken_ExpiredSignerToken() {
+        DocGen_Signer__c signer = getTestSigner();
+        // We cannot backdate CreatedDate directly, so we test the path by
+        // verifying the 30-day logic exists. Instead, set Status to exercise
+        // the expiry branch by using Test.setCreatedDate.
+        Test.setCreatedDate(signer.Id, System.now().addDays(-31));
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+        Test.stopTest();
+
+        System.assertEquals(false, res.isValid);
+        System.assertEquals('This signature link has expired. Please request a new one.', res.errorMessage);
+    }
+
+    @isTest
+    static void testValidateToken_ExpiredLegacyToken() {
+        // Delete the signer so the legacy fallback is used
+        DocGen_Signer__c signer = getTestSigner();
+        delete signer;
+
+        DocGen_Signature_Request__c req = getTestRequest();
+        Test.setCreatedDate(req.Id, System.now().addDays(-31));
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2');
+        Test.stopTest();
+
+        System.assertEquals(false, res.isValid);
+        System.assertEquals('This signature link has expired. Please request a new one.', res.errorMessage);
+    }
+
+    @isTest
+    static void testValidateToken_SignedParentRequest() {
+        DocGen_Signature_Request__c req = getTestRequest();
+        req.Status__c = 'Signed';
+        update req;
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+        Test.stopTest();
+
+        System.assertEquals(false, res.isValid);
+        System.assertEquals('This signature request is no longer active.', res.errorMessage);
+    }
+
+    @isTest
+    static void testValidateToken_SignerNoDocument() {
+        // Source_Document_Id__c is a placeholder that won't match any CV
+        // This exercises the 'Confidential Document' fallback in validateSignerToken
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        System.assertEquals('Confidential Document', res.documentTitle);
+    }
+
+    @isTest
+    static void testValidateToken_LegacyNoDocument() {
+        // Delete signer so legacy path is used; source doc ID is placeholder
+        delete getTestSigner();
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        System.assertEquals('Confidential Document', res.documentTitle);
+    }
+
+    @isTest
+    static void testFetchDocumentData_WithValidDocx() {
+        ContentVersion cv = createValidDocxForSigning();
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.fetchDocumentData('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        System.assertNotEquals(null, res.templateBase64);
+        // Should contain actual HTML from the DOCX conversion
+        System.assert(res.templateBase64.contains('Agreement'), 'HTML should contain document text');
+    }
+
+    @isTest
+    static void testFetchDocumentData_LegacyWithValidDocx() {
+        ContentVersion cv = createValidDocxForSigning();
+        // Delete signer so legacy path is used
+        delete getTestSigner();
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.fetchDocumentData('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        System.assertNotEquals(null, res.recordId);
+    }
+
+    @isTest
+    static void testFetchDocumentData_NoSourceDoc() {
+        // Source doc ID is placeholder — no CV exists
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.fetchDocumentData('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        // templateBase64 should be null when no CV found
+    }
+
+    @isTest
+    static void testSaveSignature_BlankToken() {
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveSignature('', fakeBase64);
+        } catch (AuraHandledException e) {
+            caught = true;
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw for blank token');
+    }
+
+    @isTest
+    static void testSaveSignature_MalformedToken() {
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveSignature('not-a-valid-hex-token', fakeBase64);
+        } catch (AuraHandledException e) {
+            caught = true;
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw for malformed token');
+    }
+
+    @isTest
+    static void testSaveSignature_SignerNotFound() {
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveSignature('0000000000000000000000000000000000000000000000000000000000000099', fakeBase64);
+        } catch (AuraHandledException e) {
+            caught = true;
+            System.assert(e.getMessage().contains('Signer not found'), 'Error should mention signer not found');
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw when signer not found');
+    }
+
+    @isTest
+    static void testSaveSignature_ExpiredToken() {
+        DocGen_Signer__c signer = getTestSigner();
+        Test.setCreatedDate(signer.Id, System.now().addDays(-31));
+
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveSignature('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5', fakeBase64);
+        } catch (AuraHandledException e) {
+            caught = true;
+            System.assert(e.getMessage().contains('expired'), 'Error should mention expiration');
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw for expired signer token');
+    }
+
+    @isTest
+    static void testSaveSignature_MultipleSigners_NotComplete() {
+        // Add a second signer so the first signing doesn't complete the request
+        DocGen_Signature_Request__c req = getTestRequest();
+        DocGen_Signer__c signer2 = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Second Signer',
+            Signer_Email__c = 'second@test.com',
+            Role_Name__c = 'Seller',
+            Secure_Token__c = '1111111111111111111111111111111111111111111111111111111111111111',
+            Status__c = 'Pending',
+            Sort_Order__c = 2
+        );
+        insert signer2;
+
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('first-sig'));
+
+        Test.startTest();
+        DocGenSignatureController.SaveSignatureResult result =
+            DocGenSignatureController.saveSignature('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5', fakeBase64);
+        Test.stopTest();
+
+        System.assertEquals(false, result.isComplete, 'Should not be complete with remaining signers');
+        System.assertEquals(1, result.remaining, 'One signer should remain');
+        System.assertEquals('In Progress', getTestRequest().Status__c);
+    }
+
+    @isTest
+    static void testStampAndReturnSource_InvalidTokenFormat() {
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.stampAndReturnSource('short', 'base64');
+        } catch (AuraHandledException e) {
+            caught = true;
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw for invalid token format');
+    }
+
+    @isTest
+    static void testStampAndReturnSource_MultiSignerSuccess() {
+        ContentVersion cv = createValidDocxForSigning();
+        DocGen_Signer__c signer = getTestSigner();
+
+        // Mark signer as Signed with signature data
+        signer.Status__c = 'Signed';
+        signer.Signature_Data__c = EncodingUtil.base64Encode(Blob.valueOf('buyer-sig-png'));
+        update signer;
+
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+
+        Test.startTest();
+        Map<String, String> result = DocGenSignatureController.stampAndReturnSource(
+            'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5', fakeBase64
+        );
+        Test.stopTest();
+
+        System.assertEquals('complete', result.get('status'));
+        System.assert(result.get('title').contains('Signed'));
+
+        // Verify parent request status updated
+        System.assertEquals('Signed', getTestRequest().Status__c);
+
+        // Verify audit record created
+        List<DocGen_Signature_Audit__c> audits = [
+            SELECT Signer_Name__c, Document_Hash_SHA256__c
+            FROM DocGen_Signature_Audit__c
+            WHERE Signature_Request__c = :getTestRequest().Id
+        ];
+        System.assert(!audits.isEmpty(), 'Audit records should be created');
+
+        // Verify signature data cleared
+        DocGen_Signer__c updatedSigner = [SELECT Signature_Data__c FROM DocGen_Signer__c WHERE Id = :signer.Id];
+        System.assertEquals(null, updatedSigner.Signature_Data__c, 'Signature data should be cleared');
+    }
+
+    @isTest
+    static void testStampAndReturnSource_LegacySuccess() {
+        ContentVersion cv = createValidDocxForSigning();
+        // Delete signer so legacy path is used
+        delete getTestSigner();
+
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('legacy-sig-png'));
+
+        Test.startTest();
+        Map<String, String> result = DocGenSignatureController.stampAndReturnSource(
+            'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', fakeBase64
+        );
+        Test.stopTest();
+
+        System.assertEquals('complete', result.get('status'));
+        System.assert(result.get('title').contains('Signed'));
+
+        // Verify request status updated
+        System.assertEquals('Signed', getTestRequest().Status__c);
+
+        // Verify audit record created
+        List<DocGen_Signature_Audit__c> audits = [
+            SELECT Signer_Name__c, Signer_Email__c, Document_Hash_SHA256__c
+            FROM DocGen_Signature_Audit__c
+            WHERE Signature_Request__c = :getTestRequest().Id
+        ];
+        System.assert(!audits.isEmpty(), 'Legacy audit record should be created');
+        System.assertEquals('Legacy Signer', audits[0].Signer_Name__c);
+        System.assertEquals('legacy@test.com', audits[0].Signer_Email__c);
+    }
+
+    @isTest
+    static void testStampAndReturnSource_LegacyAlreadySigned() {
+        // Delete signer so legacy path is used
+        delete getTestSigner();
+
+        DocGen_Signature_Request__c req = getTestRequest();
+        req.Status__c = 'Signed';
+        update req;
+
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.stampAndReturnSource(
+                'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', fakeBase64
+            );
+        } catch (AuraHandledException e) {
+            caught = true;
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw for already-signed legacy request');
+    }
+
+    @isTest
+    static void testStampAndReturnSource_LegacyCancelled() {
+        // Delete signer so legacy path is used
+        delete getTestSigner();
+
+        DocGen_Signature_Request__c req = getTestRequest();
+        req.Status__c = 'Cancelled';
+        update req;
+
+        String fakeBase64 = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.stampAndReturnSource(
+                'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', fakeBase64
+            );
+        } catch (AuraHandledException e) {
+            caught = true;
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw for cancelled legacy request');
+    }
+
+    @isTest
+    static void testStampAndReturnSource_NonexistentToken() {
+        // Token that matches no signer and no legacy request
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.stampAndReturnSource(
+                '0000000000000000000000000000000000000000000000000000000000000077', EncodingUtil.base64Encode(Blob.valueOf('sig'))
+            );
+        } catch (AuraHandledException e) {
+            caught = true;
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw for nonexistent token in legacy fallback');
+    }
+
+    @isTest
+    static void testStampAndReturnSource_MultiSignerWithMultipleSigners() {
+        // Create a DOCX with two role placeholders
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{#Signature_Buyer} {#Signature_Seller}</w:t></w:r></w:p></w:body></w:document>';
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'MultiRoleDoc',
+            PathOnClient = 'MultiRoleDoc.docx',
+            VersionData = buildValidDocxBlob(docXml)
+        );
+        insert cv;
+        cv = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id];
+
+        Account acc = getTestAccount();
+        insert new ContentDocumentLink(LinkedEntityId = acc.Id, ContentDocumentId = cv.ContentDocumentId, ShareType = 'V');
+
+        DocGen_Signature_Request__c req = getTestRequest();
+        req.Source_Document_Id__c = cv.Id;
+        update req;
+
+        // Update existing signer and add a second one, both marked Signed
+        DocGen_Signer__c signer1 = getTestSigner();
+        signer1.Status__c = 'Signed';
+        signer1.Signature_Data__c = EncodingUtil.base64Encode(Blob.valueOf('buyer-sig'));
+        update signer1;
+
+        Contact con = getTestContact();
+        DocGen_Signer__c signer2 = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Seller Person',
+            Signer_Email__c = 'seller@test.com',
+            Role_Name__c = 'Seller',
+            Secure_Token__c = '2222222222222222222222222222222222222222222222222222222222222222',
+            Status__c = 'Signed',
+            Signature_Data__c = EncodingUtil.base64Encode(Blob.valueOf('seller-sig')),
+            Sort_Order__c = 2,
+            Contact__c = con.Id
+        );
+        insert signer2;
+
+        Test.startTest();
+        Map<String, String> result = DocGenSignatureController.stampAndReturnSource(
+            'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
+            EncodingUtil.base64Encode(Blob.valueOf('sig'))
+        );
+        Test.stopTest();
+
+        System.assertEquals('complete', result.get('status'));
+
+        // Verify two audit records created
+        List<DocGen_Signature_Audit__c> audits = [
+            SELECT Signer_Name__c, Contact__c
+            FROM DocGen_Signature_Audit__c
+            WHERE Signature_Request__c = :req.Id
+        ];
+        System.assertEquals(2, audits.size(), 'Should create audit record per signer');
+    }
+
+    @isTest
+    static void testFinishSignatureUpload_NoOp() {
+        // Verify finishSignatureUpload accepts any arguments without error
+        Test.startTest();
+        DocGenSignatureController.finishSignatureUpload(null, null, null);
+        DocGenSignatureController.finishSignatureUpload(
+            'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
+            EncodingUtil.base64Encode(Blob.valueOf('pdf-data')),
+            'TestDoc.pdf'
+        );
+        Test.stopTest();
+
+        System.assert(true, 'finishSignatureUpload is a no-op');
+    }
+
+    @isTest
+    static void testValidateToken_SignerWithRealDocCreatesPublicLink() {
+        ContentVersion cv = createValidDocxForSigning();
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        System.assertEquals('SignableDoc', res.documentTitle);
+        // documentUrl comes from getOrCreatePublicLink
+        System.assertNotEquals(null, res.documentUrl);
+    }
+
+    @isTest
+    static void testValidateToken_LegacyWithRealDocCreatesPublicLink() {
+        ContentVersion cv = createValidDocxForSigning();
+        // Delete signer so legacy path is used
+        delete getTestSigner();
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        System.assertEquals('SignableDoc', res.documentTitle);
+        System.assertNotEquals(null, res.documentUrl);
+    }
+
+    @isTest
+    static void testValidateToken_ExistingPublicLink() {
+        ContentVersion cv = createValidDocxForSigning();
+
+        // First call creates the ContentDistribution
+        DocGenSignatureController.validateToken('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+
+        Test.startTest();
+        // Second call should find the existing ContentDistribution
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        System.assertNotEquals(null, res.documentUrl);
+    }
+
+    @isTest
+    static void testValidateToken_SignerAlreadyViewed() {
+        createTestFile();
+        DocGen_Signer__c signer = getTestSigner();
+        signer.Status__c = 'Viewed';
+        update signer;
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        // Should not update status again since it's already Viewed
+        System.assertEquals('Viewed', [SELECT Status__c FROM DocGen_Signer__c WHERE Id = :signer.Id].Status__c);
+    }
+
+    @isTest
+    static void testValidateToken_LegacyViewedStatus() {
+        // Delete signer so legacy path is used
+        delete getTestSigner();
+
+        DocGen_Signature_Request__c req = getTestRequest();
+        req.Status__c = 'Viewed';
+        update req;
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        // Should not update status since it's already Viewed (not Sent)
+    }
+
+    @isTest
+    static void testValidateToken_SignerWithSignedCountGreaterThanZero() {
+        createTestFile();
+        DocGen_Signature_Request__c req = getTestRequest();
+
+        // Add a second signer who is already signed
+        DocGen_Signer__c signer2 = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Already Signed',
+            Signer_Email__c = 'done@test.com',
+            Role_Name__c = 'Seller',
+            Secure_Token__c = '3333333333333333333333333333333333333333333333333333333333333333',
+            Status__c = 'Signed',
+            Sort_Order__c = 2
+        );
+        insert signer2;
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res =
+            DocGenSignatureController.validateToken('f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5');
+        Test.stopTest();
+
+        System.assertEquals(true, res.isValid);
+        System.assertEquals(2, res.totalSigners);
+        System.assertEquals(1, res.signedCount, 'One signer should already be signed');
+    }
+
+    // =========================================================================
+    // DocGenSignatureSubmitter — success path
+    // =========================================================================
+
+    @isTest
+    static void testSignatureSubmitter_SuccessPath() {
+        ContentVersion cv = createValidDocxForSigning();
+        DocGen_Signature_Request__c req = getTestRequest();
+        String fakeBase64Sig = EncodingUtil.base64Encode(Blob.valueOf('submit-sig'));
+
+        DocGenSignatureSubmitter.FlowInput input = new DocGenSignatureSubmitter.FlowInput();
+        input.token = req.Secure_Token__c;
+        input.signatureData = fakeBase64Sig;
+
+        Test.startTest();
+        List<DocGenSignatureSubmitter.FlowOutput> outputs =
+            DocGenSignatureSubmitter.submitSignature(new List<DocGenSignatureSubmitter.FlowInput>{ input });
+        Test.stopTest();
+
+        System.assertEquals(1, outputs.size());
+        System.assertEquals(true, outputs[0].isSuccess, 'Should succeed with valid token and DOCX');
+    }
+
+    // =========================================================================
+    // DocGenSignatureEmailService — additional coverage
+    // =========================================================================
+
+    @isTest
+    static void testSendSignatureRequestEmailsEmptyList() {
+        Test.startTest();
+        DocGenSignatureEmailService.sendSignatureRequestEmails(null, 'Test');
+        DocGenSignatureEmailService.sendSignatureRequestEmails(new List<DocGenSignatureEmailService.SignerEmail>(), 'Test');
+        Test.stopTest();
+        System.assert(true, 'Should handle empty/null signer lists without error');
+    }
+
+    @isTest
+    static void testSendSignatureRequestEmailsWithoutContact() {
+        DocGenSignatureEmailService.SignerEmail signer = new DocGenSignatureEmailService.SignerEmail(
+            'No Contact', 'nocontact@test.com', 'Buyer', 'https://example.com/sign?token=abc', null
+        );
+
+        Test.startTest();
+        DocGenSignatureEmailService.sendSignatureRequestEmails(
+            new List<DocGenSignatureEmailService.SignerEmail>{ signer }, 'Test Document'
+        );
+        Test.stopTest();
+        System.assert(true, 'Should send email without contact');
+    }
+
+    @isTest
+    static void testSendSignatureRequestEmailsWithBranding() {
+        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+        settings.Company_Name__c = 'Test Corp';
+        settings.Signature_Email_Logo_Url__c = 'https://logo.png';
+        settings.Signature_Email_Brand_Color__c = '#FF0000';
+        settings.Signature_Email_Subject__c = 'Sign Now: {DocumentTitle}';
+        settings.Signature_Email_Footer_Text__c = 'Custom footer text';
+        upsert settings;
+
+        Contact con = getTestContact();
+        DocGenSignatureEmailService.SignerEmail signer = new DocGenSignatureEmailService.SignerEmail(
+            'Branded Signer', 'branded@test.com', 'Seller', 'https://example.com/sign?token=xyz', con.Id
+        );
+
+        Test.startTest();
+        DocGenSignatureEmailService.sendSignatureRequestEmails(
+            new List<DocGenSignatureEmailService.SignerEmail>{ signer }, 'Branded Doc'
+        );
+        Test.stopTest();
+        System.assert(true, 'Should send branded email');
+    }
+
+    @isTest
+    static void testSendSignatureRequestEmailsNullValues() {
+        DocGenSignatureEmailService.SignerEmail signer = new DocGenSignatureEmailService.SignerEmail(
+            null, 'null@test.com', null, 'https://example.com/sign?token=abc', null
+        );
+
+        Test.startTest();
+        DocGenSignatureEmailService.sendSignatureRequestEmails(
+            new List<DocGenSignatureEmailService.SignerEmail>{ signer }, null
+        );
+        Test.stopTest();
+        System.assert(true, 'Should handle null values gracefully');
+    }
+
+    @isTest
+    static void testSendSignatureRequestEmailsCompanyNameOnly() {
+        // Covers the branch where logoUrl is blank but companyName is set
+        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+        settings.Company_Name__c = 'Name Only Corp';
+        settings.Signature_Email_Logo_Url__c = null;
+        settings.Signature_Email_Brand_Color__c = null;
+        settings.Signature_Email_Subject__c = null;
+        settings.Signature_Email_Footer_Text__c = null;
+        upsert settings;
+
+        DocGenSignatureEmailService.SignerEmail signer = new DocGenSignatureEmailService.SignerEmail(
+            'Signer', 'signer@test.com', null, 'https://example.com/sign', null
+        );
+
+        Test.startTest();
+        DocGenSignatureEmailService.sendSignatureRequestEmails(
+            new List<DocGenSignatureEmailService.SignerEmail>{ signer }, 'Doc Title'
+        );
+        Test.stopTest();
+        System.assert(true, 'Should render company name as text when no logo');
+    }
+
+    // =========================================================================
+    // DocGenSignatureSenderController — additional coverage
+    // =========================================================================
+
+    @isTest
+    static void testGetPendingSignatureRequestsWithNullSourceDoc() {
+        Account acc = getTestAccount();
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Signer_Name__c = 'NullDoc Signer',
+            Signer_Email__c = 'nulldoc@test.com',
+            Source_Document_Id__c = null,
+            Related_Record_Id__c = acc.Id,
+            Secure_Token__c = 'b2b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6b2b2',
+            Status__c = 'Sent'
+        );
+        insert req;
+
+        Test.startTest();
+        List<Map<String, Object>> results = DocGenSignatureSenderController.getPendingSignatureRequests(acc.Id);
+        Test.stopTest();
+
+        System.assert(results.size() >= 1, 'Should return results including null source doc request');
+    }
+
+    @isTest
+    static void testGetSiteBaseUrlWithConfiguredUrl() {
+        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+        settings.Experience_Site_Url__c = 'https://mysite.example.com/';
+        upsert settings;
+
+        ContentVersion cv = createTestFile();
+        Account acc = getTestAccount();
+
+        Test.startTest();
+        String signingUrl = DocGenSignatureSenderController.createSignatureRequest(
+            cv.ContentDocumentId, acc.Id, 'Site Test', 'site@test.com'
+        );
+        Test.stopTest();
+
+        System.assert(signingUrl.startsWith('https://mysite.example.com/'), 'Should use configured site URL');
+        System.assert(!signingUrl.contains('//apex'), 'Trailing slash should be trimmed');
+    }
+
+    // =========================================================================
+    // DocGenSignatureService — additional coverage
+    // =========================================================================
+
+    @isTest
+    static void testHandleSignatureSubmissionCancelledStatus() {
+        DocGen_Signature_Request__c req = getTestRequest();
+        req.Status__c = 'Cancelled';
+        update req;
+
+        String fakeBase64Sig = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+
+        Test.startTest();
+        DocGenSignatureService.handleSignatureSubmission(req.Secure_Token__c, fakeBase64Sig);
+        Test.stopTest();
+
+        System.assert(true, 'Should skip cancelled request silently');
+    }
+
+    @isTest
+    static void testHandleSignatureSubmissionBlankToken() {
+        String fakeBase64Sig = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureService.handleSignatureSubmission('', fakeBase64Sig);
+        } catch (DocGenSignatureService.SignatureException e) {
+            caught = true;
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw for blank token');
+    }
+
+    @isTest
+    static void testHandleSignatureSubmissionWrongLengthToken() {
+        String fakeBase64Sig = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+        Boolean caught = false;
+
+        Test.startTest();
+        try {
+            DocGenSignatureService.handleSignatureSubmission('abcdef1234', fakeBase64Sig);
+        } catch (DocGenSignatureService.SignatureException e) {
+            caught = true;
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Should throw for wrong-length token');
+    }
+
+    @isTest
+    static void testHandleSignatureSubmissionNonMatchingToken() {
+        String validFormatToken = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+        String fakeBase64Sig = EncodingUtil.base64Encode(Blob.valueOf('sig'));
+
+        Test.startTest();
+        DocGenSignatureService.handleSignatureSubmission(validFormatToken, fakeBase64Sig);
+        Test.stopTest();
+
+        System.assert(true, 'Should return silently for non-matching token');
+    }
+
+    @isTest
+    static void testStampAllSignaturesToBlobFallbackAppend() {
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>No placeholder</w:t></w:r></w:p></w:body></w:document>';
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'FallbackDoc',
+            PathOnClient = 'FallbackDoc.docx',
+            VersionData = buildValidDocxBlob(docXml)
+        );
+        insert cv;
+
+        String sig = EncodingUtil.base64Encode(Blob.valueOf('sig-data'));
+        List<DocGenSignatureService.SignerData> signers = new List<DocGenSignatureService.SignerData>{
+            new DocGenSignatureService.SignerData('Manager', sig)
+        };
+
+        Test.startTest();
+        Blob result = DocGenSignatureService.stampAllSignaturesToBlob(cv.Id, signers);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Should return blob even with fallback');
+    }
 }

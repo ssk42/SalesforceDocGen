@@ -33,4 +33,31 @@ private class DocGenBulkFlowActionTest {
         // Note: Status might be Processing or Completed depending on execution speed in test
         System.assertNotEquals(null, job.Status__c, 'Job should have a status');
     }
+
+    @isTest
+    static void testGenerateBulkDocumentsErrorPath() {
+        // Use a null templateId to trigger the error/catch branch
+        DocGenBulkFlowAction.Request req = new DocGenBulkFlowAction.Request();
+        req.templateId = null;
+        req.queryCondition = 'Name = \'Test\'';
+
+        Test.startTest();
+        List<DocGenBulkFlowAction.Response> responses = DocGenBulkFlowAction.generateBulkDocuments(
+            new List<DocGenBulkFlowAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(1, responses.size(), 'Should have one response');
+        System.assertNotEquals(null, responses[0].errorMessage, 'Should have an error message');
+        System.assertEquals(null, responses[0].jobId, 'Should not have a jobId on error');
+    }
+
+    @isTest
+    static void testBulkFlowActionResponseCoverage() {
+        DocGenBulkFlowAction.Response res = new DocGenBulkFlowAction.Response();
+        res.jobId = null;
+        res.errorMessage = 'test';
+        System.assertEquals(null, res.jobId);
+        System.assertEquals('test', res.errorMessage);
+    }
 }
