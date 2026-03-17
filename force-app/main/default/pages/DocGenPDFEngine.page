@@ -13,13 +13,23 @@
                 background: white;
             }
 
-            /* Page Break Rules - Relaxed */
+            /* Page Break Rules */
+            p, li, span, div {
+                orphans: 3 !important;
+                widows: 3 !important;
+            }
+
             table, tr, td, th {
                 page-break-inside: avoid !important;
             }
 
             h1, h2, h3, h4 {
                 page-break-after: avoid !important;
+            }
+
+            /* Keep paragraphs together when possible */
+            p {
+                page-break-inside: avoid !important;
             }
 
             /* Print Media Query */
@@ -135,7 +145,7 @@
                                 backgroundColor: '#ffffff'
                             },
                             jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
-                            pagebreak:    { mode: ['css', 'legacy'] }
+                            pagebreak:    { mode: ['css', 'legacy'], avoid: ['p', 'li', 'tr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'] }
                         };
 
                         var worker = html2pdf().from(container).set(opt);

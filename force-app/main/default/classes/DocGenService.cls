@@ -42,6 +42,12 @@ public with sharing class DocGenService {
         String contentTypesXml = null;
         String relsXml = null;
 
+        // Determine rels path based on template type
+        String relsPath = (templateType == 'PowerPoint')
+            ? 'ppt/_rels/presentation.xml.rels'
+            : 'word/_rels/document.xml.rels';
+        String mediaPath = (templateType == 'PowerPoint') ? 'ppt/media/' : 'word/media/';
+
         for (Compression.ZipEntry entry : reader.getEntries()) {
             String name = entry.getName();
             Boolean isTargetXml = false;
@@ -61,7 +67,7 @@ public with sharing class DocGenService {
                 writer.addEntry(name, Blob.valueOf(xml));
             } else if (name == '[Content_Types].xml') {
                 contentTypesXml = reader.extract(name).toString();
-            } else if (name == 'word/_rels/document.xml.rels') {
+            } else if (name == relsPath) {
                 relsXml = reader.extract(name).toString();
             } else {
                 writer.addEntry(name, reader.extract(name));
@@ -89,7 +95,7 @@ public with sharing class DocGenService {
             for (Map<String, Object> img : pendingImages) {
                 String fName = (String) img.get('fileName');
                 Blob imageBlob = (Blob) img.get('blob');
-                writer.addEntry('word/media/' + fName, imageBlob);
+                writer.addEntry(mediaPath + fName, imageBlob);
             }
         }
 
@@ -97,7 +103,7 @@ public with sharing class DocGenService {
             writer.addEntry('[Content_Types].xml', Blob.valueOf(contentTypesXml));
         }
         if (relsXml != null) {
-            writer.addEntry('word/_rels/document.xml.rels', Blob.valueOf(relsXml));
+            writer.addEntry(relsPath, Blob.valueOf(relsXml));
         }
 
         Blob resultBlob = writer.getArchive();

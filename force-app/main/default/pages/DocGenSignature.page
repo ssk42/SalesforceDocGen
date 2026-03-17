@@ -242,6 +242,8 @@
         /* Hidden PDF render zone */
         .docx-wrapper { padding: 0 !important; margin: 0 !important; background: transparent !important; }
         section.docx-render { margin: 0 !important; padding: 0 !important; }
+        p, li, span, div { orphans: 3 !important; widows: 3 !important; }
+        p { page-break-inside: avoid !important; }
         table, tr, td, th { page-break-inside: avoid !important; }
         h1, h2, h3, h4 { page-break-after: avoid !important; }
     </style>

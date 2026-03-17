@@ -108,11 +108,16 @@ export default class DocGenRunner extends LightningElement {
                 const iframe = this.template.querySelector('iframe');
                 if (!iframe) throw new Error('PDF Engine iframe not found.');
 
+                // Always request the blob back ('save' mode) so we can
+                // handle download or save-to-record from the LWC context.
+                // The default 'else' branch in the PDF Engine calls
+                // worker.save() which downloads inside the hidden iframe,
+                // invisible to the user.
                 iframe.contentWindow.postMessage({
                     type: 'generate',
                     blob: bytes.buffer,
                     fileName: docTitle,
-                    mode: this.outputMode
+                    mode: 'save'
                 }, '*');
 
                 // Safety timeout — stop spinner if PDF engine never responds
@@ -183,6 +188,19 @@ export default class DocGenRunner extends LightningElement {
             if (this._pdfTimeout) { clearTimeout(this._pdfTimeout); this._pdfTimeout = null; }
             if (this.outputMode === 'save' && event.data.blob) {
                 await this.saveToSalesforce(event.data.fileName, event.data.blob, 'pdf');
+            } else if (event.data.blob) {
+                // Download the PDF blob returned by the engine
+                const pdfBlob = new Blob([event.data.blob], { type: 'application/pdf' });
+                const url = URL.createObjectURL(pdfBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = (event.data.fileName || 'Document') + '.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.showToast('Success', 'PDF downloaded.', 'success');
+                this.isLoading = false;
             } else {
                 this.showToast('Success', 'Document Generated successfully.', 'success');
                 this.isLoading = false;
