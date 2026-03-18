@@ -420,7 +420,7 @@ Open the **DocGen Admin Guide** tab in the DocGen app to access it.
 
 ## Contributing
 
-This is an open-source project under the MIT license. We welcome contributions:
+This is an open-source project under the Apache license, Version 2.0 . We welcome contributions:
 
 1. Fork the repository
 2. Create a feature branch
