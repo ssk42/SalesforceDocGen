@@ -33,6 +33,7 @@ public with sharing class DocGenSignatureEmailService {
         String logoUrl = settings.Signature_Email_Logo_Url__c;
         String companyName = settings.Company_Name__c;
         String footerText = settings.Signature_Email_Footer_Text__c;
+        String messageTemplate = settings.Signature_Email_Message__c;
         String subjectTemplate = String.isNotBlank(settings.Signature_Email_Subject__c)
             ? settings.Signature_Email_Subject__c : 'Action Required: Please Sign {DocumentTitle}';
 
@@ -40,7 +41,7 @@ public with sharing class DocGenSignatureEmailService {
 
         for (SignerEmail signer : signers) {
             String subject = mergeFields(subjectTemplate, signer.signerName, documentTitle, senderName);
-            String htmlBody = buildEmailHtml(signer, documentTitle, senderName, brandColor, logoUrl, companyName, footerText);
+            String htmlBody = buildEmailHtml(signer, documentTitle, senderName, brandColor, logoUrl, companyName, footerText, messageTemplate);
 
             Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
             email.setSubject(subject);
@@ -79,7 +80,7 @@ public with sharing class DocGenSignatureEmailService {
      */
     private static String buildEmailHtml(
         SignerEmail signer, String documentTitle, String senderName,
-        String brandColor, String logoUrl, String companyName, String footerText
+        String brandColor, String logoUrl, String companyName, String footerText, String messageTemplate
     ) {
         String safeSignerName = escapeHtml(signer.signerName != null ? signer.signerName : 'there');
         String safeDocTitle = escapeHtml(documentTitle != null ? documentTitle : 'Document');
@@ -118,9 +119,15 @@ public with sharing class DocGenSignatureEmailService {
         // Greeting
         html += '<p style="font-size:16px;color:#333333;margin:0 0 16px 0;">Hi ' + safeSignerName + ',</p>';
 
-        // Main message
+        // Main message (customizable via settings)
+        String message;
+        if (String.isNotBlank(messageTemplate)) {
+            message = mergeFields(messageTemplate, signer.signerName, documentTitle, senderName);
+        } else {
+            message = safeSenderName + ' has sent you a document that requires your signature:';
+        }
         html += '<p style="font-size:15px;color:#555555;margin:0 0 16px 0;line-height:1.5;">';
-        html += safeSenderName + ' has sent you a document that requires your signature:</p>';
+        html += escapeHtml(message) + '</p>';
 
         // Document info box
         html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px 0;">';

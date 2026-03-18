@@ -107,6 +107,17 @@
                                 <p class="slds-text-body_small slds-var-m-top_xx-small">Merge fields: &#123;SignerName&#125;, &#123;DocumentTitle&#125;, &#123;SenderName&#125;</p>
                             </div>
                             <div class="slds-col slds-size_1-of-1 slds-var-p-bottom_small">
+                                <lightning-input
+                                    type="text"
+                                    label="Email Message Body"
+                                    value={emailMessage}
+                                    onchange={handleEmailMessageChange}
+                                    placeholder="has sent you a document that requires your signature:"
+                                    max-length="255">
+                                </lightning-input>
+                                <p class="slds-text-body_small slds-var-m-top_xx-small">Merge fields: &#123;SignerName&#125;, &#123;DocumentTitle&#125;, &#123;SenderName&#125;. Leave blank for default message.</p>
+                            </div>
+                            <div class="slds-col slds-size_1-of-1 slds-var-p-bottom_small">
                                 <lightning-textarea
                                     label="Email Footer Text"
                                     value={emailFooterText}
@@ -136,7 +147,7 @@
                                     </div>
                                     <div style="padding:20px;font-size:13px;color:#555;">
                                         <p><strong>Hi [Signer Name],</strong></p>
-                                        <p>[Sender] has sent you a document that requires your signature.</p>
+                                        <p>{emailMessagePreview}</p>
                                         <div style="background:#f8f9fa;padding:12px;border-radius:4px;margin:12px 0;">
                                             <small style="color:#999;">Document</small><br/>
                                             <strong>[Document Title]</strong>

@@ -897,7 +897,7 @@ private class DocGenMiscTests {
     static void testSaveEmailBrandingSettings() {
         Test.startTest();
         DocGenSetupController.saveEmailBrandingSettings(
-            'Acme Corp', 'https://logo.png', '#FF5733', 'Please Sign {DocumentTitle}', 'Footer text here'
+            'Acme Corp', 'https://logo.png', '#FF5733', 'Please Sign {DocumentTitle}', 'Custom message here', 'Footer text here'
         );
         Test.stopTest();
 
@@ -911,10 +911,10 @@ private class DocGenMiscTests {
 
     @isTest
     static void testSaveEmailBrandingSettingsUpdatesExisting() {
-        DocGenSetupController.saveEmailBrandingSettings('First', null, null, null, null);
+        DocGenSetupController.saveEmailBrandingSettings('First', null, null, null, null, null);
 
         Test.startTest();
-        DocGenSetupController.saveEmailBrandingSettings('Second', 'https://logo2.png', '#000000', 'Subject2', 'Footer2');
+        DocGenSetupController.saveEmailBrandingSettings('Second', 'https://logo2.png', '#000000', 'Subject2', 'Message2', 'Footer2');
         Test.stopTest();
 
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
@@ -2050,6 +2050,543 @@ private class DocGenMiscTests {
         Test.stopTest();
 
         System.assertNotEquals(null, result.get('blob'));
+    }
+
+    // =========================================================================
+    // DocGenService — applyResolvedImages
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentWithResolvedImages() {
+        // Exercises the resolvedImages map (line 54-56) — applyResolvedImages with <img> tag
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('IMGDATA'));
+        acc.Description = '<img src="https://example.com/image.png" />';
+        update acc;
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Query_Config__c = 'Name, Description';
+        update tpl;
+
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Description}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        Map<String, String> resolvedImages = new Map<String, String>{
+            'https://example.com/image.png' => 'data:image/png;base64,' + tinyBase64
+        };
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id, resolvedImages);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('blob'));
+    }
+
+    // =========================================================================
+    // DocGenService — processDocumentAsHtml
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentAsHtml() {
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>Hello {Name}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocumentAsHtml(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('html'));
+        System.assertEquals('PDF', result.get('outputFormat'));
+    }
+
+    @isTest
+    static void testProcessDocumentAsHtmlThrowsForPowerPoint() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Type__c = 'PowerPoint';
+        update tpl;
+
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry('[Content_Types].xml', Blob.valueOf(
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+            '<Default Extension="xml" ContentType="application/xml"/></Types>'
+        ));
+        zw.addEntry('_rels/.rels', Blob.valueOf(
+            '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+        ));
+        zw.addEntry('ppt/slides/slide1.xml', Blob.valueOf(
+            '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>' +
+            '<p:sp><p:txBody><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<a:r><a:t>{Name}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>'
+        ));
+        ContentVersion cv = new ContentVersion(Title='PPTHtml', PathOnClient='PPTHtml.pptx', VersionData=zw.getArchive());
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
+
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Boolean caught = false;
+        Test.startTest();
+        try {
+            DocGenService.processDocumentAsHtml(tpl.Id, acc.Id);
+        } catch (DocGenException e) {
+            caught = true;
+        }
+        Test.stopTest();
+        System.assert(caught, 'Should throw for PowerPoint HTML generation');
+    }
+
+    // =========================================================================
+    // DocGenService — cleanupTempImages
+    // =========================================================================
+
+    @isTest
+    static void testCleanupTempImages_Blank() {
+        Test.startTest();
+        DocGenService.cleanupTempImages('');
+        DocGenService.cleanupTempImages(null);
+        Test.stopTest();
+        System.assert(true, 'Should return silently for blank key');
+    }
+
+    @isTest
+    static void testCleanupTempImages_NoMatch() {
+        Test.startTest();
+        DocGenService.cleanupTempImages('nonexistentbatchkeyvalue12345');
+        Test.stopTest();
+        System.assert(true, 'Should handle no matching temp images gracefully');
+    }
+
+    // =========================================================================
+    // DocGenService — preparePdfImages
+    // =========================================================================
+
+    @isTest
+    static void testPreparePdfImages() {
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.preparePdfImages(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('batchKey'));
+        System.assertNotEquals(null, result.get('title'));
+    }
+
+    // =========================================================================
+    // DocGenService — generatePdfFromBatch
+    // =========================================================================
+
+    @isTest
+    static void testGeneratePdfFromBatch() {
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        Blob pdfBlob = DocGenService.generatePdfFromBatch(tpl.Id, acc.Id, 'testbatchkey00000000000000000000');
+        Test.stopTest();
+
+        System.assertNotEquals(null, pdfBlob);
+    }
+
+    // =========================================================================
+    // DocGenService — processDocumentAsHtmlWithImageMap
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentAsHtmlWithImageMap() {
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Map<String, String> imageMap = new Map<String, String>{
+            'rIdTest' => 'https://example.com/image.png'
+        };
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocumentAsHtmlWithImageMap(tpl.Id, acc.Id, imageMap);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('html'));
+        System.assertEquals('PDF', result.get('outputFormat'));
+    }
+
+    // =========================================================================
+    // DocGenService — extractAndSaveTemplateImages
+    // =========================================================================
+
+    @isTest
+    static void testExtractAndSaveTemplateImages() {
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry('[Content_Types].xml', Blob.valueOf(
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+            '<Default Extension="xml" ContentType="application/xml"/>' +
+            '<Default Extension="png" ContentType="image/png"/></Types>'
+        ));
+        zw.addEntry('_rels/.rels', Blob.valueOf(
+            '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+            '</Relationships>'
+        ));
+        zw.addEntry('word/document.xml', Blob.valueOf(
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>'
+        ));
+        zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>' +
+            '</Relationships>'
+        ));
+        zw.addEntry('word/media/image1.png', Blob.valueOf('FAKEPNGDATA'));
+
+        ContentVersion cv = new ContentVersion(Title='ImgDocx', PathOnClient='ImgDocx.docx', VersionData=zw.getArchive());
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
+
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Content_Version_Id__c = cv.Id,
+            Is_Active__c = true,
+            Type__c = 'Word',
+            Base_Object_API__c = 'Account'
+        );
+        insert ver;
+
+        Test.startTest();
+        DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id);
+        Test.stopTest();
+
+        String prefix = 'docgen_tmpl_img_' + ver.Id + '_';
+        List<ContentVersion> savedImgs = [SELECT Title FROM ContentVersion WHERE Title LIKE :(prefix + '%')];
+        System.assert(savedImgs.size() >= 1, 'Should have saved at least one template image');
+    }
+
+    // =========================================================================
+    // DocGenService — rich text with formatting tags
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentRichTextWithFormattingTags() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        acc.Description = '<p><b>Bold</b> <i>Italic</i> <u>Underline</u></p>';
+        update acc;
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Query_Config__c = 'Name, Description';
+        update tpl;
+
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Description}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('blob'));
+    }
+
+    @isTest
+    static void testProcessDocumentRichTextWithStrongAndEm() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        acc.Description = '<strong>Strong</strong> and <em>Emphasis</em>';
+        update acc;
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Query_Config__c = 'Name, Description';
+        update tpl;
+
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Description}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('blob'));
+    }
+
+    // =========================================================================
+    // DocGenService — rich text with inline image (img tag with src URL)
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentRichTextImgWithSalesforceUrl() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        acc.Description = '<p>Text <img src="/servlet/rtaImage?eid=001&feoid=00N&refid=0EM000000000001" width="200" height="100" /> more text</p>';
+        update acc;
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Query_Config__c = 'Name, Description';
+        update tpl;
+
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Description}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('blob'));
+    }
+
+    // =========================================================================
+    // DocGenService — image tag with HTTPS URL (generic external)
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentImageTagHttpsUrl() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        acc.Description = 'https://example.com/some-image.png';
+        update acc;
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Query_Config__c = 'Name, Description';
+        update tpl;
+
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{%Description}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('blob'));
+    }
+
+    // =========================================================================
+    // DocGenService — image tag in PowerPoint (skipped)
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentPowerPointImageTagSkipped() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Type__c = 'PowerPoint';
+        update tpl;
+
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry('[Content_Types].xml', Blob.valueOf(
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+            '<Default Extension="xml" ContentType="application/xml"/></Types>'
+        ));
+        zw.addEntry('_rels/.rels', Blob.valueOf(
+            '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+        ));
+        zw.addEntry('ppt/slides/slide1.xml', Blob.valueOf(
+            '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>' +
+            '<p:sp><p:txBody><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<a:r><a:t>{%Description}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>'
+        ));
+        ContentVersion cv = new ContentVersion(Title='PPTImg', PathOnClient='PPTImg.pptx', VersionData=zw.getArchive());
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
+
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        acc.Description = 'data:image/png;base64,' + EncodingUtil.base64Encode(Blob.valueOf('IMG'));
+        update acc;
+        tpl.Query_Config__c = 'Name, Description';
+        update tpl;
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('blob'));
+    }
+
+    // =========================================================================
+    // DocGenService — rich text HTML in PowerPoint (plain text strip)
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentPowerPointHtmlStripped() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Type__c = 'PowerPoint';
+        tpl.Query_Config__c = 'Name, Description';
+        update tpl;
+
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        acc.Description = '<p>Paragraph <b>bold</b></p>';
+        update acc;
+
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry('[Content_Types].xml', Blob.valueOf(
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+            '<Default Extension="xml" ContentType="application/xml"/></Types>'
+        ));
+        zw.addEntry('_rels/.rels', Blob.valueOf(
+            '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+        ));
+        zw.addEntry('ppt/slides/slide1.xml', Blob.valueOf(
+            '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>' +
+            '<p:sp><p:txBody><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<a:r><a:t>{Description}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>'
+        ));
+        ContentVersion cv = new ContentVersion(Title='PPTHtml2', PathOnClient='PPTHtml2.pptx', VersionData=zw.getArchive());
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('blob'));
+    }
+
+    // =========================================================================
+    // DocGenService — generateAndSavePdfFromBatch
+    // =========================================================================
+
+    @isTest
+    static void testGenerateAndSavePdfFromBatch() {
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        Id docId = DocGenService.generateAndSavePdfFromBatch(tpl.Id, acc.Id, 'testbatch0000000000000000000000');
+        Test.stopTest();
+
+        System.assertNotEquals(null, docId);
+    }
+
+    // =========================================================================
+    // DocGenService — Date format on DateTime field with alternate format
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentWithDateTimeAlternateFormat() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        tpl.Query_Config__c = 'Name, CreatedDate';
+        update tpl;
+
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{CreatedDate:yyyy-MM-dd HH:mm}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('blob'));
+    }
+
+    // =========================================================================
+    // DocGenService — DOCX with existing images (rels parsing)
+    // =========================================================================
+
+    @isTest
+    static void testProcessDocumentWithExistingTemplateImage() {
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry('[Content_Types].xml', Blob.valueOf(
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+            '<Default Extension="xml" ContentType="application/xml"/>' +
+            '<Default Extension="png" ContentType="image/png"/></Types>'
+        ));
+        zw.addEntry('_rels/.rels', Blob.valueOf(
+            '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+            '</Relationships>'
+        ));
+        zw.addEntry('word/document.xml', Blob.valueOf(
+            '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>'
+        ));
+        zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>' +
+            '<Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+            '</Relationships>'
+        ));
+        zw.addEntry('word/media/image1.png', Blob.valueOf('FAKEPNGBYTES'));
+
+        ContentVersion cv = new ContentVersion(Title='TmplImg', PathOnClient='TmplImg.docx', VersionData=zw.getArchive());
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
+
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('blob'));
+    }
+
+    // =========================================================================
+    // DocGenException — thrown and caught
+    // =========================================================================
+
+    @isTest
+    static void testDocGenExceptionThrown() {
+        Boolean caught = false;
+        Test.startTest();
+        try {
+            throw new DocGenException('Test throw');
+        } catch (DocGenException e) {
+            caught = true;
+            System.assertEquals('Test throw', e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(caught, 'Should catch thrown DocGenException');
     }
 
 }

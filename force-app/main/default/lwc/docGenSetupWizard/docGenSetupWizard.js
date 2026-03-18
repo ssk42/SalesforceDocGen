@@ -14,6 +14,7 @@ export default class DocGenSetupWizard extends LightningElement {
     @track emailLogoUrl = '';
     @track emailBrandColor = '#0176D3';
     @track emailSubject = 'Action Required: Please Sign {DocumentTitle}';
+    @track emailMessage = '';
     @track emailFooterText = '';
     @track isSavingBranding = false;
 
@@ -25,6 +26,7 @@ export default class DocGenSetupWizard extends LightningElement {
             this.emailLogoUrl = data.Signature_Email_Logo_Url__c || '';
             this.emailBrandColor = data.Signature_Email_Brand_Color__c || '#0176D3';
             this.emailSubject = data.Signature_Email_Subject__c || 'Action Required: Please Sign {DocumentTitle}';
+            this.emailMessage = data.Signature_Email_Message__c || '';
             this.emailFooterText = data.Signature_Email_Footer_Text__c || '';
             this.isLoaded = true;
         } else if (error) {
@@ -62,7 +64,12 @@ export default class DocGenSetupWizard extends LightningElement {
     handleLogoUrlChange(event) { this.emailLogoUrl = event.target.value; }
     handleBrandColorChange(event) { this.emailBrandColor = event.target.value; }
     handleEmailSubjectChange(event) { this.emailSubject = event.target.value; }
+    handleEmailMessageChange(event) { this.emailMessage = event.target.value; }
     handleFooterTextChange(event) { this.emailFooterText = event.target.value; }
+
+    get emailMessagePreview() {
+        return this.emailMessage || '[Sender] has sent you a document that requires your signature.';
+    }
 
     handleSaveEmailBranding() {
         this.isSavingBranding = true;
@@ -71,6 +78,7 @@ export default class DocGenSetupWizard extends LightningElement {
             logoUrl: this.emailLogoUrl,
             brandColor: this.emailBrandColor,
             emailSubject: this.emailSubject,
+            emailMessage: this.emailMessage,
             footerText: this.emailFooterText
         })
             .then(() => {

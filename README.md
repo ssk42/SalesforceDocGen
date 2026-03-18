@@ -2,13 +2,13 @@
 
 **A free, native, production-ready document engine for Salesforce.**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](#quick-install)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](#quick-install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![API Version](https://img.shields.io/badge/API-v66.0-orange.svg)](#)
 [![Dependencies](https://img.shields.io/badge/JS%20dependencies-zero-brightgreen.svg)](#)
 
-Generate DOCX, PPTX, and PDF documents from any Salesforce record. Merge fields, loop over child records, inject images from rich text fields, collect legally-binding electronic signatures, and render PDFs -- all 100% server-side, without leaving Salesforce, and without paying a dime.
+Generate DOCX, PPTX, and PDF documents from any Salesforce record. Merge fields, loop over child records, inject images, collect legally-binding electronic signatures, and render PDFs -- all 100% server-side, without leaving Salesforce, and without paying a dime.
 
 ---
 
@@ -16,33 +16,28 @@ Generate DOCX, PPTX, and PDF documents from any Salesforce record. Merge fields,
 
 - [Why This Exists](#why-this-exists)
 - [Quick Install](#quick-install)
-- [What's New in v1.0.0](#whats-new-in-v100)
+- [What's New in v1.1.0](#whats-new-in-v110)
 - [Features at a Glance](#features-at-a-glance)
-- [Admin Guide](#admin-guide)
-  - [Initial Setup](#initial-setup)
+- [Getting Started](#getting-started)
   - [Permission Sets](#permission-sets)
-  - [PDF Engine Setup](#pdf-engine-setup)
-  - [Electronic Signature Setup](#electronic-signature-setup)
-  - [Template Management](#template-management)
-  - [Bulk Generation](#bulk-generation)
-  - [Flow Integration](#flow-integration)
-  - [Template Sharing](#template-sharing)
-- [User Guide](#user-guide)
-  - [Generating Documents from a Record](#generating-documents-from-a-record)
-  - [Sending Documents for Signature](#sending-documents-for-signature)
-  - [Signing a Document](#signing-a-document)
+  - [Adding Components to Record Pages](#adding-components-to-record-pages)
+  - [E-Signature Site Setup](#e-signature-site-setup)
+  - [Email Branding](#email-branding)
 - [Template Authoring Guide](#template-authoring-guide)
+  - [How Merge Tags Work](#how-merge-tags-work)
   - [Tag Syntax Reference](#tag-syntax-reference)
-  - [Creating Your First Template](#creating-your-first-template)
   - [Working with Child Records](#working-with-child-records)
-  - [Table Row Expansion](#table-row-expansion)
-  - [Conditional Sections](#conditional-sections)
   - [Image Injection](#image-injection)
   - [Date Formatting](#date-formatting)
-  - [Document Title Formatting](#document-title-formatting)
+  - [Conditional Sections](#conditional-sections)
   - [Signature Placeholders](#signature-placeholders)
+- [E-Signatures](#e-signatures)
+  - [Signature Roles](#signature-roles)
+  - [Signer Templates](#signer-templates)
+- [Bulk Generation](#bulk-generation)
+- [Flow Integration](#flow-integration)
 - [Architecture](#architecture)
-- [Project Structure](#project-structure)
+- [In-App Admin Guide](#in-app-admin-guide)
 - [Changelog](#changelog)
 - [Contributing](#contributing)
 - [License](#license)
@@ -53,15 +48,13 @@ Generate DOCX, PPTX, and PDF documents from any Salesforce record. Merge fields,
 
 Document generation in Salesforce is expensive. The market leaders charge per-user, per-month fees that quickly add up across an organization. We believe basic document needs should be accessible to everyone.
 
-This project gives you a professional-grade document engine -- template management, bulk generation, flow integration, server-side PDF rendering, rich text with embedded images, and multi-signer electronic signatures -- entirely for free and fully open-source.
+This project gives you a professional-grade document engine -- template management, bulk generation, flow integration, server-side PDF rendering, image injection, and multi-signer electronic signatures -- entirely for free and fully open-source.
 
 ---
 
 ## Quick Install
 
-**Subscriber Package Version ID**: `04tdL000000Or6PQAS`
-
-> Update this ID after publishing the v1.0.0 package version.
+**Package Version ID**: `04tdL000000Or6PQAS`
 
 **CLI:**
 ```bash
@@ -72,41 +65,41 @@ sf package install --package 04tdL000000Or6PQAS --wait 10 --installation-key-byp
 - [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Or6PQAS)
 - [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000Or6PQAS)
 
-> Select **Install for Admins Only** during installation, then assign permission sets to your users afterward.
+> Select **Install for Admins Only** during installation, then assign permission sets to your users.
 
 ---
 
-## What's New in v1.0.0
+## What's New in v1.1.0
 
-This is a major release that eliminates all client-side JavaScript dependencies and moves the entire PDF pipeline server-side.
+### In-App Admin Guide
+- Comprehensive admin guide accessible as the **first tab** in the DocGen app
+- 14 sections covering every feature: templates, merge tags, signatures, roles, email branding, logo hosting, permissions, versioning, flow automation, and troubleshooting
+- Documents the `{%ImageField:WxH}` image injection syntax with ContentVersion usage
 
-### Server-Side PDF Generation
-- PDF documents are now generated entirely in Apex using `Blob.toPdf()` with the new `DocGenHtmlRenderer` engine
-- No more iframe rendering, postMessage communication, or browser-side conversion
-- PDFs generate instantly in bulk, flow, and signature contexts
+### Template Version Preview
+- Version preview modal redesigned to show the **query configuration** that was active at that time
+- **Download** the exact template file from any version
+- **Generate a sample document** using a previous version's template against your test record
+- Active/inactive status badges on each version
 
-### Zero JavaScript Dependencies
-- Removed `docx-preview.js`, `html2pdf.js`, `jszip.min.js`, and `filesaver.js`
-- The entire `DocGenEngine` static resource bundle has been removed
-- No third-party JS libraries remain in the package
+### Email Branding & Copy
+- Customizable **email subject line**, **footer text**, **logo**, and **brand color** for signature request emails
+- All configurable from the DocGen Setup tab
+- Support for merge fields in the subject: `{SignerName}`, `{DocumentTitle}`, `{SenderName}`
 
-### Simplified Architecture
-- Removed the async rendition pipeline (Queueable, Finalizer, Platform Event)
-- Removed `DocGenPDFEngine.page` (client-side PDF rendering page)
-- Removed `DocGenRenditionService`, `DocGenRenditionQueueable`, `DocGenRenditionFinalizer`, and `DocGenRenditionTrigger`
-- Single-path PDF generation: DOCX XML -> HTML -> `Blob.toPdf()`
+### Security Hardening
+- All DML operations wrapped with `Security.stripInaccessible()` for CRUD/FLS enforcement
+- SOQL filter sanitization strengthened with whitespace normalization
+- Signature token generation upgraded from `Math.random()` to `Crypto.generateAesKey(256)`
+- Error messages genericized to prevent information disclosure
+- Debug logging levels reduced to prevent sensitive data exposure
+- Added explicit `WITH SYSTEM_MODE` to all system-context queries
+- Passed Salesforce Code Analyzer with zero actionable high-severity findings
 
-### Signature Flow Improvements
-- Signature page no longer loads any JavaScript libraries for document preview
-- Document preview is rendered as pre-built HTML from the server
-- Signed PDFs are generated and saved server-side immediately after signing
-
-### Security & AppExchange Readiness
-- All metadata upgraded to API version 66.0 (Spring '26)
-- All DML operations use `Security.stripInaccessible()` for CRUD/FLS enforcement
-- All dynamic SOQL uses `AccessLevel.USER_MODE` for user data queries
-- Verbose debug logging removed; only ERROR/WARN level logging remains
-- Dev artifacts and test scripts cleaned from the repository
+### Bug Fixes
+- Fixed setup wizard email preview typo
+- Fixed duplicate `rawPreviewJson` getter in query builder
+- Removed unused JavaScript imports and duplicate class members
 
 ---
 
@@ -117,309 +110,131 @@ This is a major release that eliminates all client-side JavaScript dependencies 
 | **Template Manager** | Create, edit, version, and share document templates with a visual query builder |
 | **Record Page Generator** | Drop-in LWC component -- users select a template and generate from any record |
 | **PDF Generation** | Server-side conversion from DOCX to PDF via `Blob.toPdf()` |
-| **Bulk Generation** | Generate documents for thousands of records with real-time progress tracking |
+| **Bulk Generation** | Generate documents for hundreds of records with real-time progress tracking |
 | **Flow Integration** | Invocable actions for single-record and bulk generation in any Flow |
-| **Electronic Signatures** | Multi-signer, role-based, legally-binding signatures with audit trails |
-| **Image Injection** | Embed images from rich text fields, ContentVersion files, or URLs |
-| **Template Versioning** | Full version history with restore and activate capabilities |
-| **Template Sharing** | Share templates with specific users or groups |
+| **Electronic Signatures** | Multi-signer, role-based signatures with branded emails and audit trails |
+| **Image Injection** | Embed images from ContentVersion files, rich text fields, or base64 data |
+| **Template Versioning** | Full version history with preview, download, restore, and sample generation |
+| **Admin Guide** | Built-in comprehensive guide as the first tab in the app |
+| **Document Authenticator** | SHA-256 hash verification of signed PDFs (client-side, no upload) |
 
 ---
 
-## Admin Guide
-
-### Initial Setup
-
-After installing the package:
-
-1. **Assign permission sets** to yourself and your users (see [Permission Sets](#permission-sets))
-2. **Add the generator component** to record pages (see [Adding to Record Pages](#adding-the-generator-to-record-pages))
-3. **Configure the PDF engine** if you need PDF output or image support (see [PDF Engine Setup](#pdf-engine-setup))
-4. **Configure signatures** if you want electronic signatures (see [Electronic Signature Setup](#electronic-signature-setup))
+## Getting Started
 
 ### Permission Sets
 
-Assign these from **Setup > Permission Sets > Manage Assignments**:
+After installing, assign these from **Setup > Permission Sets**:
 
 | Permission Set | Who Gets It | What It Grants |
 |---------------|-------------|----------------|
-| **DocGen Admin** | Admins, template managers | Create/edit/delete templates, bulk generation, sharing management, setup wizard access |
-| **DocGen User** | End users | Generate documents from existing templates, download/save documents |
-| **DocGen Guest Signature** | Site guest user profile | Signature submission via public VF pages (assigned to the Site guest user, not individual users) |
+| **DocGen Admin** | Admins, template managers | Full CRUD on all DocGen objects, setup wizard access, template sharing |
+| **DocGen User** | End users | Generate documents, view templates (read-only), manage own signature requests |
+| **DocGen Guest Signature** | Site guest user only | Signature submission via public VF pages (never assign to internal users) |
 
-### PDF Engine Setup
+### Adding Components to Record Pages
 
-The PDF engine requires a Named Credential so Salesforce can make authenticated loopback calls (needed for rich text image resolution). If you only generate DOCX/PPTX files and don't use images from rich text fields, you can skip this.
+**Document Generator** -- lets users generate documents from any record:
+1. Navigate to a record page > Gear icon > **Edit Page**
+2. Drag the **docGenRunner** component onto the layout
+3. Save and activate
 
-1. Navigate to the **DocGen Setup** tab in the DocGen app
-2. Follow the 3-step wizard:
+**Signature Sender** -- lets users send documents for e-signature:
+1. Same process, drag **docGenSignatureSender** onto the page
+2. Shows recently generated documents and tracks signature status
 
-**Step 1: Create an External Client App**
-- Go to **Setup > App Manager > New Connected App** (or **External Client App** in newer orgs)
-- App name: `DocGen Loopback`
-- Enable OAuth: checked
-- Callback URL: your org's login URL (e.g., `https://yourorg.my.salesforce.com/services/oauth2/callback`)
-- OAuth Scopes: `api`, `refresh_token`
-- Enable PKCE: checked
-- Save and wait for the app to propagate
+### E-Signature Site Setup
 
-**Step 2: Provision Credentials**
-- Copy the Consumer Key and Consumer Secret from your new app
-- Paste them into the setup wizard
-- Click **Provision Credentials** -- this automatically creates the Auth Provider, External Credential, and Named Credential
-- Wait up to 10 minutes for metadata propagation
-- Click **Authenticate** to authorize the named principal
-- Go to **Setup > Named Credentials > External Credentials > DocGen Loopback Auth > [Principal Name]**, and add both `DocGen Admin` and `DocGen User` permission sets under **Permission Set Mappings**
+E-signatures require a Salesforce Site (not Experience Cloud):
 
-**Step 3: Configure Site URL**
-- Enter your Salesforce Site base URL (see [Electronic Signature Setup](#electronic-signature-setup) if you're using signatures)
-- This is used to generate public signing links
-
-### Electronic Signature Setup
-
-E-signatures require a Salesforce Site (Digital Experience is **not** required):
-
-1. **Create a Salesforce Site**
-   - Go to **Setup > Sites > New**
-   - Site label: `DocGen Signatures` (or your preference)
-   - Site name: `DocGenSignatures`
-   - Default page: `DocGenSignature`
-   - Active Site Home Page: `DocGenSignature`
+1. Go to **Setup > Sites** > click **New**
+2. Configure:
+   - Site Label: **DocGen Signatures**
+   - Active Site Home Page: **DocGenSignature**
    - Check **Active**
-   - Save
+3. Click **Public Access Settings** > add **DocGenSignature** to Enabled Visualforce Page Access
+4. Assign the **DocGen Guest Signature** permission set to the Site Guest User
+5. Copy the Site URL and paste it in the **DocGen Setup** tab
 
-2. **Configure the Guest User Profile**
-   - From the Site detail page, click **Public Access Settings**
-   - Under **Enabled Visualforce Page Access**, add:
-     - `DocGenSignature`
-     - `DocGenSign`
-     - `DocGenVerify`
-   - Go back to the guest user profile and assign the `DocGen Guest Signature` permission set
+> Signature links are secured with SHA-256 tokens and expire after 30 days.
 
-3. **Save the Site URL**
-   - Copy your site's base URL (e.g., `https://yourorg.my.salesforce-sites.com`)
-   - Enter it in the DocGen Setup wizard (Step 3)
+### Email Branding
 
-4. **Create Signature Templates** (optional)
-   - From the **Signature Sender** component on any record page, click the template management icon
-   - Define reusable signer role configurations (e.g., Buyer + Seller + Witness)
+Customize the emails sent to signers from the **DocGen Setup** tab (Step 2):
 
-> No Experience Cloud site, Screen Flow, or embedded component is required. The VF pages handle the entire signing experience natively.
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Company Name** | Shown in email header when no logo is set | (blank) |
+| **Logo Image URL** | Company logo in email header (200x60px PNG recommended) | (blank) |
+| **Brand Color** | Header bar and CTA button color | `#0176D3` |
+| **Email Subject** | Supports merge fields: `{SignerName}`, `{DocumentTitle}`, `{SenderName}` | `Action Required: Please Sign {DocumentTitle}` |
+| **Footer Text** | Custom text at email bottom | `Powered by DocGen` |
 
-### Template Management
-
-Access: Navigate to the **DocGen Template Manager** tab.
-
-**Creating a Template:**
-1. Click **New Template**
-2. Fill in:
-   - **Name**: Display name for the template
-   - **Category**: Organizational grouping (e.g., Sales, Legal, HR)
-   - **Type**: Word or PowerPoint
-   - **Base Object**: The Salesforce object this template generates from (e.g., Account, Opportunity)
-   - **Output Format**: Native (DOCX/PPTX) or PDF
-   - **Description**: Optional notes about the template
-3. Upload your `.docx` or `.pptx` template file (see [Template Authoring Guide](#template-authoring-guide))
-4. Use the **Query Builder** to select which fields and relationships to include
-5. Click **Save**
-
-**Testing a Template:**
-1. Enter a Test Record ID in the template settings
-2. Click **Test Generate**
-3. The document downloads immediately for review
-
-**Versioning:**
-- Each time you save a template with changes, you can create a new version
-- Previous versions are listed with timestamps and the author
-- Click **Activate** on any previous version to roll back
-
-**Document Title Formatting:**
-- Set a custom title pattern using merge tags: `{Name} - Invoice {CloseDate:yyyy-MM-dd}`
-- If blank, the title defaults to the record's Name field
-
-### Bulk Generation
-
-Access: Navigate to the **DocGen Bulk Gen** tab.
-
-1. Select a template from the dropdown
-2. Optionally enter a WHERE clause to filter records (e.g., `StageName = 'Closed Won' AND CloseDate = THIS_QUARTER`)
-3. Click **Validate** to preview the record count
-4. Click **Generate** to start the batch job
-5. Monitor progress in real-time -- the UI updates with success/error counts
-
-**Saved Queries:**
-- Save frequently-used filter conditions for reuse
-- Access saved queries from the dropdown menu
-- Each saved query stores a name, description, and filter condition
-
-### Flow Integration
-
-Two invocable actions for embedding document generation in any Salesforce Flow:
-
-**Single Record -- `Generate Document (DocGen)`:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `templateId` | Input | The ID of the DocGen_Template__c record |
-| `recordId` | Input | The ID of the source record |
-| `contentDocumentId` | Output | The ContentDocumentId of the generated file |
-| `errorMessage` | Output | Error details if generation fails |
-
-**Bulk/Batch -- `Generate Documents Bulk (DocGen)`:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `templateId` | Input | The ID of the DocGen_Template__c record |
-| `queryCondition` | Input | Optional WHERE clause to filter records |
-| `jobId` | Output | The ID of the DocGen_Job__c record for progress tracking |
-| `errorMessage` | Output | Error details if the job fails to start |
-
-**Example: Auto-generate a PDF when an Opportunity closes:**
-1. Create a Record-Triggered Flow on Opportunity
-2. Entry criteria: `StageName = 'Closed Won'`
-3. Add a **Generate Document** action
-4. Map `templateId` to your quote template
-5. Map `recordId` to `{!$Record.Id}`
-
-### Template Sharing
-
-Templates support user and group-level sharing:
-
-1. Open a template in the Template Manager
-2. Click the **Sharing** tab
-3. Search for users or public groups
-4. Grant **Read** or **Edit** access
-5. Users with Edit access can modify the template; Read-only users can generate but not change it
-
----
-
-## User Guide
-
-### Generating Documents from a Record
-
-1. Navigate to any record page that has the **DocGen** component (your admin adds this via Lightning App Builder)
-2. Select a template from the dropdown -- only templates configured for this object type appear
-3. Choose the output format:
-   - **Download** -- generates and downloads the file to your browser
-   - **Save to Record** -- generates and attaches the file to the record's Files related list
-4. Click the generate button
-5. For DOCX/PPTX: the file downloads immediately
-6. For PDF: the document is converted server-side and downloads or saves automatically
-
-### Sending Documents for Signature
-
-1. On a record page, find the **Signature Sender** component
-2. Click **New Signature Request**
-3. Select the document to be signed (must be a `.docx` file attached to the record)
-4. Add signers:
-   - Enter each signer's **name**, **email**, and **role** (if using multi-signer templates)
-   - Use the contact lookup to auto-fill from existing contacts
-   - Or load a saved signature template for predefined role configurations
-5. Click **Send**
-6. Each signer receives a unique secure URL
-7. Copy the URLs and share them with signers (via email, Slack, etc.)
-8. Track signing progress from the **Previous Requests** section
-
-### Signing a Document
-
-When you receive a signature link:
-
-1. Open the URL in any browser (mobile or desktop)
-2. Review the document displayed on the page
-3. Draw your signature in the signature pad at the bottom
-4. Click **Submit Signature**
-5. If you're the last signer, the system:
-   - Stamps all signatures into the document at the designated placeholders
-   - Converts the signed document to PDF
-   - Saves the PDF to the Salesforce record
-   - Creates an audit trail with a SHA-256 hash of the final PDF
-6. If other signers are still pending, you'll see a confirmation that your signature was saved
+**Logo hosting tips:**
+- For the best email experience, host your logo on a **public URL** (your company website or CDN)
+- Salesforce-hosted images (ContentVersion, Static Resource) require authentication -- email clients won't render them
+- If you have a Salesforce Site, you can serve a Static Resource through the Site URL for public access
 
 ---
 
 ## Template Authoring Guide
 
-### Tag Syntax Reference
+### How Merge Tags Work
 
-Place these tags directly in your `.docx` or `.pptx` template file:
+DocGen uses **plain text replacement**. Each tag in your template is swapped with the corresponding field value. That's it.
+
+**What this means:**
+- Tags are replaced with **text values only** -- they won't insert images, charts, or media (use the `{%}` image tag for that)
+- Tables don't dynamically expand -- use **loop tags** for repeating rows
+- Formatting (bold, font, color) comes from your template, not the data -- the replaced text inherits the tag's formatting
+- Rich Text fields are inserted as plain text (HTML stripped)
+
+### Tag Syntax Reference
 
 | Tag | Purpose | Example |
 |-----|---------|---------|
 | `{FieldName}` | Simple field merge | `{Name}`, `{Email}` |
 | `{Parent.Field}` | Parent record lookup | `{Account.Name}`, `{Owner.Email}` |
-| `{#ChildList}...{/ChildList}` | Loop over child records | `{#Contacts}{FirstName} {LastName}{/Contacts}` |
-| `{#BooleanField}...{/BooleanField}` | Conditional section | `{#IsActive}Active member{/IsActive}` |
-| `{FieldName:format}` | Date/DateTime with format | `{CloseDate:MM/dd/yyyy}` |
-| `{%ImageField}` | Image injection (default 4"x3") | `{%Company_Logo__c}` |
-| `{%ImageField:WxH}` | Image with pixel dimensions | `{%Photo__c:400x300}` |
-| `{#Signature}` | Single-signer signature placeholder | |
-| `{#Signature_RoleName}` | Multi-signer role placeholder | `{#Signature_Buyer}` |
-
-### Creating Your First Template
-
-1. Open Microsoft Word or Google Docs (export as .docx)
-2. Type your document content normally
-3. Where you want dynamic data, insert a merge tag:
-   ```
-   Dear {Name},
-
-   Thank you for your order dated {CloseDate:MMMM d, yyyy}.
-   Your total is {Amount}.
-
-   Regards,
-   {Owner.Name}
-   ```
-4. Save as `.docx`
-5. Upload to a DocGen template configured for the matching object (e.g., Opportunity)
+| `{#ChildList}...{/ChildList}` | Loop over child records | `{#Contacts}{FirstName}{/Contacts}` |
+| `{#BooleanField}...{/BooleanField}` | Conditional section | `{#IsActive}Active{/IsActive}` |
+| `{Field:format}` | Date with format | `{CloseDate:MM/dd/yyyy}` |
+| `{%ImageField}` | Image (default 4"x3") | `{%Company_Logo__c}` |
+| `{%ImageField:WxH}` | Image with pixel size | `{%Photo__c:200x150}` |
+| `{#Signature}` | Single-signer placeholder | |
+| `{#Signature_Role}` | Multi-signer placeholder | `{#Signature_Client}` |
 
 ### Working with Child Records
 
-To repeat a block of content for each child record:
-
-```
-Line Items:
-{#OpportunityLineItems}
-  - {Name}: {Quantity} x {UnitPrice} = {TotalPrice}
-{/OpportunityLineItems}
-```
-
-The content between `{#OpportunityLineItems}` and `{/OpportunityLineItems}` repeats once for each child record. Use the **relationship name** (not the object API name) as the loop tag.
-
-### Table Row Expansion
-
-When loop tags are placed inside a table row, the entire row is automatically repeated:
+Loop tags repeat content for each child record. In tables, the entire row is duplicated:
 
 | Product | Qty | Price |
 |---------|-----|-------|
-| {#OpportunityLineItems}{Name} | {Quantity} | {TotalPrice}{/OpportunityLineItems} |
+| `{#OpportunityLineItems}{Name}` | `{Quantity}` | `{TotalPrice}{/OpportunityLineItems}` |
 
-This produces one row per line item. Place `{#LoopName}` at the start and `{/LoopName}` at the end of the same row.
-
-### Conditional Sections
-
-Show or hide content based on boolean (checkbox) fields:
-
-```
-{#HasSpecialTerms}
-SPECIAL TERMS AND CONDITIONS
-This agreement includes the following special provisions...
-{/HasSpecialTerms}
-```
-
-The content only appears if the field value is `true`.
+Use the **relationship name** (not the object API name) as the loop tag. Configure child relationships and their fields in the Query Builder.
 
 ### Image Injection
 
-Images can come from several sources:
+Use `{%FieldName}` to dynamically insert images into Word documents. This is the one exception to the plain text rule.
 
-- **Rich text fields**: HTML `<img>` tags are automatically extracted and converted
-- **ContentVersion IDs**: `{%MyImageField__c}` where the field contains a ContentVersion ID (starts with `068`)
-- **Base64 data URIs**: Fields containing `data:image/png;base64,...`
-- **Salesforce file URLs**: `/servlet/rtaImage` or `/sfc/servlet.shepherd/` URLs
+```
+{%Company_Logo__c}           -- Default size (4" x 3")
+{%Photo__c:200x150}          -- 200px wide, 150px tall
+{%Headshot__c:100x100}       -- 100px square
+```
 
-**Sizing:**
-- Default size: 4 inches x 3 inches
-- Custom size: `{%Photo__c:200x150}` (width x height in pixels)
+**Supported image sources** (what to store in the field):
 
-> Image resolution requires the Named Credential (DocGen Loopback) to be configured. See [PDF Engine Setup](#pdf-engine-setup).
+| Source | Field Value | Example |
+|--------|------------|---------|
+| **ContentVersion ID** (recommended) | 18-char ID starting with `068` | `068xx0000012345AAA` |
+| **Rich Text HTML** | Rich Text Area with embedded image | Any RTA field with an image |
+| **Base64 data URI** | `data:image/png;base64,...` | Data URI string |
+| **Salesforce file URL** | `/sfc/servlet.shepherd/...` | Salesforce file URL |
+
+> **Best practice:** Upload your image as a Salesforce File, copy the ContentVersion ID, and store it in a text field. Then use `{%MyField__c:200x60}` in your template.
+
+> Image tags only work in **Word (.docx)** templates. External URLs cannot be fetched (no HTTP callouts).
 
 ### Date Formatting
 
@@ -427,195 +242,179 @@ Append a format string after a colon:
 
 | Example | Output |
 |---------|--------|
-| `{CloseDate:MM/dd/yyyy}` | 03/15/2026 |
-| `{CreatedDate:MMMM d, yyyy}` | March 15, 2026 |
-| `{CreatedDate:yyyy-MM-dd HH:mm}` | 2026-03-15 14:30 |
-| `{CloseDate:EEE, MMM d}` | Sun, Mar 15 |
+| `{CloseDate:MM/dd/yyyy}` | 03/18/2026 |
+| `{CreatedDate:MMMM d, yyyy}` | March 18, 2026 |
+| `{CreatedDate:yyyy-MM-dd HH:mm}` | 2026-03-18 14:30 |
 
-Format strings follow Salesforce's `DateTime.format()` patterns (Java SimpleDateFormat).
+### Conditional Sections
 
-### Document Title Formatting
+Show or hide content based on field values:
 
-In the template settings, set a **Document Title Format** to control the generated file name:
+```
+{#HasSpecialTerms}
+SPECIAL TERMS: This agreement includes special provisions...
+{/HasSpecialTerms}
+```
 
-| Format | Result |
-|--------|--------|
-| `{Name} - Quote` | Acme Corp - Quote |
-| `Invoice {CloseDate:yyyy-MM}` | Invoice 2026-03 |
-| `{Account.Name} - {Name}` | Acme Corp - Big Deal |
-
-If blank, the title defaults to the record's Name field value.
+Content appears only if the field is truthy (non-null, non-empty, non-false).
 
 ### Signature Placeholders
 
-**Single signer:** Place `{#Signature}` in your template where the signature image should appear.
+**Single signer:** `{#Signature}`
 
-**Multiple signers:** Use role-specific placeholders:
-- `{#Signature_Buyer}`
-- `{#Signature_Seller}`
+**Multiple signers** (role-specific):
+- `{#Signature_Client}`
+- `{#Signature_Account_Executive}`
 - `{#Signature_Witness}`
 
-The role name in the placeholder must match the role assigned to the signer (with spaces replaced by underscores).
+Role names use underscores for spaces. When signed, the placeholder is replaced with the drawn signature image plus a timestamp.
 
-If a placeholder is not found in the document, the signature is appended to the end of the document with a label.
+---
+
+## E-Signatures
+
+### How It Works
+
+1. **Generate a document** with signature placeholders in the template
+2. **Send for signature** from the Signature Sender component on the record page
+3. **Signers receive branded emails** with secure links
+4. **Signers review and sign** on a public page with a signature pad
+5. **Signed PDF is generated** with all signatures stamped in place
+6. **Audit trail** records signer name, email, IP, browser, timestamp, and SHA-256 hash
+
+### Signature Roles
+
+Roles map signers to specific locations in the document:
+
+```
+{#Signature_Client}       -- Where the client signs
+{#Signature_Witness}      -- Where the witness signs
+```
+
+The Signature Sender auto-detects roles by scanning the document for `{#Signature_*}` placeholders.
+
+### Signer Templates
+
+Save frequently used role configurations:
+1. Configure signers and roles in the Signature Sender
+2. Click **Save as Template**
+3. Load it next time from the dropdown -- roles are pre-populated
+
+---
+
+## Bulk Generation
+
+1. Go to the **Bulk Generation** tab
+2. Select a template
+3. Enter a filter condition: `Industry = 'Technology'` or `StageName = 'Closed Won' AND CloseDate = THIS_YEAR`
+4. Click **Count Records** to verify
+5. Click **Generate** -- documents are saved as Files on each record
+6. Monitor progress in the Recent Jobs section (auto-refreshes every 5s)
+
+Save frequently used filters with **Save Query** for reuse.
+
+---
+
+## Flow Integration
+
+**Generate Document (Single Record)** -- `DocGenFlowAction`:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `templateId` | Input | DocGen_Template__c record ID |
+| `recordId` | Input | Source record ID |
+| `contentDocumentId` | Output | Generated file ID |
+
+**Generate Documents (Bulk)** -- `DocGenBulkFlowAction`:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `templateId` | Input | DocGen_Template__c record ID |
+| `queryCondition` | Input | SOQL WHERE clause |
+| `jobId` | Output | DocGen_Job__c record ID |
+
+**Signature Actions** (for Experience Cloud flows):
+- `DocGenSignatureValidator` -- Validates a signature token
+- `DocGenSignatureFinalizer` -- Processes signature submission in system context
+- `DocGenSignatureSubmitter` -- Handles signature from Flow context
 
 ---
 
 ## Architecture
 
-### Document Generation Pipeline
-
-All document generation runs **100% server-side in Apex** -- no client-side JavaScript is involved at any stage.
+All document generation runs **100% server-side in Apex** -- no client-side JavaScript.
 
 ```
 Template (.docx/.pptx)
-    |
-    v
-Decompress ZIP (Salesforce Compression API)
-    |
-    v
-Pre-process XML
-    |-- Merge split text runs (<w:r> elements)
-    |-- Normalize template tags across formatting boundaries
-    |
-    v
-Tag Processing (Apex)
-    |-- Simple substitution: {Field} -> value
-    |-- Loop expansion: {#List}...{/List} -> repeated content
-    |-- Conditional rendering: {#Bool}...{/Bool}
-    |-- Image injection: {%Image} -> DrawingML <w:drawing> elements
-    |-- Rich text HTML -> extracted images + inline text
-    |
-    v
-Recompress ZIP -> DOCX/PPTX Blob
-    |
-    v
-PDF path (if output format = PDF):
-    |-- DocGenHtmlRenderer converts DOCX XML -> HTML
-    |-- Blob.toPdf(html) generates PDF natively in Apex
-    |
-    v
-Save as ContentVersion (attached to record)
-```
-
-### Signature Flow
-
-```
-Admin generates signature links from record page
-    |
-    v
-Each signer receives a unique URL with a cryptographic token
-    |
-    v
-Signer opens link -> VF page validates token
-    |-- Server renders DOCX as HTML via DocGenHtmlRenderer
-    |-- HTML displayed directly in the page (no JS libraries)
-    |
-    v
-Signer draws signature on canvas -> submits PNG
-    |
-    v
-All signers complete?
-    |-- Yes -> Stamp all signature PNGs into DOCX at role placeholders
-    |       -> Convert stamped DOCX to HTML -> Blob.toPdf()
-    |       -> Save PDF to record
-    |       -> Create audit trail with SHA-256 hash per signer
-    |-- No  -> Save signature data, wait for remaining signers
+    → Decompress ZIP (Salesforce Compression API)
+    → Pre-process XML (merge split text runs, normalize tags)
+    → Tag Processing:
+        {Field}           → plain text substitution
+        {#List}...{/List} → row/content duplication
+        {#Bool}...{/Bool} → conditional rendering
+        {%Image:WxH}      → DrawingML image injection
+    → Recompress ZIP → DOCX/PPTX Blob
+    → PDF path: DocGenHtmlRenderer → Blob.toPdf()
+    → Save as ContentVersion on record
 ```
 
 ### Key Classes
 
 | Class | Responsibility |
 |-------|---------------|
-| `DocGenService` | Core template merge engine -- tag processing, image injection, ZIP assembly |
-| `DocGenHtmlRenderer` | Converts DOCX XML to HTML for `Blob.toPdf()` conversion |
-| `DocGenController` | LWC controller -- template CRUD, document generation, PDF generation |
-| `DocGenDataRetriever` | Dynamic SOQL execution with field validation |
-| `DocGenTemplateManager` | Template file retrieval with version support |
-| `DocGenBatch` | Batch Apex for bulk document generation |
-| `DocGenSignatureController` | VF page controller for the signing portal |
-| `DocGenSignatureService` | Signature stamping into DOCX via OpenXML manipulation |
-| `DocGenSignatureSenderController` | Multi-signer request creation and management |
+| `DocGenService` | Core merge engine -- tag processing, image injection, ZIP assembly |
+| `DocGenHtmlRenderer` | DOCX XML to HTML conversion for `Blob.toPdf()` |
+| `DocGenController` | LWC controller -- template CRUD, generation, versioning |
+| `DocGenDataRetriever` | Dynamic SOQL with Schema validation |
+| `DocGenSignatureService` | Signature stamping via OpenXML manipulation |
+| `DocGenSignatureEmailService` | Branded HTML email generation |
+| `DocGenBatch` | Batch Apex for bulk generation |
 
 ---
 
-## Project Structure
+## In-App Admin Guide
 
-```
-force-app/main/default/
-  classes/              Apex classes (services, controllers, batch, tests)
-  lwc/                  Lightning Web Components
-    docGenAdmin/          Template manager UI
-    docGenRunner/         Record page document generator
-    docGenBulkRunner/     Bulk generation UI
-    docGenSignatureSender/ Signature request sender
-    docGenSignaturePad/   Signature drawing canvas
-    docGenQueryBuilder/   Visual SOQL query builder
-    docGenFilterBuilder/  Bulk filter condition builder
-    docGenSetupWizard/    Credential provisioning wizard
-    docGenSharing/        Template sharing UI
-    docGenTitleEditor/    Document title format editor
-    docGenWelcome/        App welcome page
-    docGenAuthenticator/  Named credential authentication
-  objects/              Custom objects + custom settings
-    DocGen_Template__c/     Template definitions
-    DocGen_Template_Version__c/ Template version history
-    DocGen_Job__c/          Bulk generation job tracking
-    DocGen_Saved_Query__c/  Saved filter conditions
-    DocGen_Signature_Request__c/ Signature requests
-    DocGen_Signer__c/       Individual signer records
-    DocGen_Signature_Audit__c/ Signed document audit trail
-    DocGen_Signature_Template__c/ Reusable signer role templates
-    DocGen_Signature_Template_Role__c/ Template role definitions
-    DocGen_Settings__c/     Custom settings (site URL)
-  pages/                Visualforce pages
-    DocGenSignature       Main signature portal
-    DocGenSign            Signature submission endpoint
-    DocGenVerify          Signature verification page
-    DocGenProvision       Credential provisioning endpoint
-  permissionsets/       Permission sets (Admin, User, Guest Signature)
-  applications/         DocGen Lightning App
-  tabs/                 Custom tabs
+DocGen includes a comprehensive **Admin Guide** built directly into the app as the first tab. It covers:
 
-unpackaged/             Post-install metadata (not in package)
-  flows/                Signature submission flow
-```
+- Installation & setup walkthrough
+- Template creation and the visual query builder
+- Merge tag syntax with examples
+- Dynamic image injection with `{%}` tags and ContentVersion IDs
+- E-signature workflow, roles, and templates
+- Email branding configuration
+- Logo hosting options (external, Salesforce-hosted, Site-hosted)
+- Sharing and permissions architecture
+- Template versioning with preview, download, and rollback
+- Flow and automation actions
+- Troubleshooting common issues
+
+Open the **DocGen Admin Guide** tab in the DocGen app to access it.
 
 ---
 
 ## Changelog
 
+### v1.1.0
+- **Admin Guide** -- In-app admin guide as the first tab with 14 sections covering all features
+- **Version Preview** -- Redesigned with query display, template download, and sample generation
+- **Email Branding** -- Configurable subject, footer, logo, and brand color for signature emails
+- **Security** -- `Security.stripInaccessible()` on all DML, `Crypto.generateAesKey()` for tokens, sanitization hardening, error message genericization
+- **Image Documentation** -- `{%ImageField:WxH}` syntax with ContentVersion usage documented in-app
+
 ### v1.0.0
-- **Server-Side PDF** -- All PDF generation now uses `DocGenHtmlRenderer` + `Blob.toPdf()`. Zero client-side JavaScript.
-- **Removed** -- `DocGenEngine` bundle, `html2pdf.js`, `docx-preview.js`, `jszip.min.js`, `filesaver.js`, `DocGenPDFEngine.page`, rendition pipeline (Queueable/Finalizer/Platform Event/Trigger)
-- **Security** -- All DML uses `Security.stripInaccessible()`. Verbose debug logging removed. API version 66.0.
-- **Signature** -- Server-side document preview and PDF generation for the signing portal.
+- **Server-Side PDF** -- All PDF generation uses `DocGenHtmlRenderer` + `Blob.toPdf()`. Zero client-side JavaScript.
+- **Removed** -- All third-party JS libraries, client-side rendering pipeline
+- **Security** -- API version 66.0, CRUD/FLS enforcement, verbose debug logging removed
+- **Signature** -- Server-side document preview and PDF generation for the signing portal
 
-### v0.9.1
-- PKCE Auth Fix for credential provisioning
-- Wizard UX improvements with propagation delay warnings
-
-### v0.9.0
-- One-click credential provisioning via setup wizard
-- Streamlined 3-step setup process
+### v0.9.x
+- PKCE Auth Fix, wizard UX improvements, credential provisioning
 
 ### v0.8.0
-- Fixed package uninstall blockers (moved auth metadata to `unpackaged/`)
-- Updated terminology to External Client App
+- Fixed package uninstall blockers, updated terminology
 
-### v0.7.0
-- Bulk PDF generation fix (all records now get PDFs)
-- Transaction Finalizer retries for rendition pipeline
-
-### v0.6.0
-- Security hardening (CRUD/FLS, SOQL injection, postMessage validation, HTTPS enforcement)
-
-### v0.5.0
-- 100% server-side document generation via Salesforce Compression API
-- Multi-signer signature roles
-- Rich text and image support
-- Background PDF rendition
-- 2GP package ready
+### v0.7.0 and earlier
+- Bulk PDF generation, transaction finalizer retries, security hardening, compression API migration, multi-signer roles, rich text support, 2GP package
 
 ---
 
@@ -625,9 +424,9 @@ This is an open-source project under the MIT license. We welcome contributions:
 
 1. Fork the repository
 2. Create a feature branch
-3. Submit a pull request with a clear description of your changes
+3. Submit a pull request with a clear description
 
-Please report bugs and feature requests via [GitHub Issues](https://github.com/DaveMoudy/SalesforceDocGen/issues).
+Report bugs and feature requests via [GitHub Issues](https://github.com/DaveMoudy/SalesforceDocGen/issues).
 
 ---
 

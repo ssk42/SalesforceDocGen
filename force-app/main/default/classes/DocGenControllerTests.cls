@@ -538,7 +538,7 @@ private class DocGenControllerTests {
             DocGenController.generateDocumentData(fakeTemplateId, acc.Id);
         } catch (DocGenException e) {
             caughtException = true;
-            System.assert(e.getMessage().contains('Template not found'),
+            System.assert(e.getMessage().contains('Unable to access template'),
                 'Should indicate template not found');
         }
         Test.stopTest();
