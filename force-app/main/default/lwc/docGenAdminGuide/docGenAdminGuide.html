@@ -763,6 +763,85 @@
                 </div>
             </template>
 
+            <!-- ==================== DATA MODEL ==================== -->
+            <template if:true={isDataModel}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Data Model</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Document Generation Objects</h3>
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                        <thead>
+                            <tr class="slds-line-height_reset">
+                                <th scope="col"><div class="slds-truncate">Object</div></th>
+                                <th scope="col"><div class="slds-truncate">API Name</div></th>
+                                <th scope="col"><div class="slds-truncate">Purpose</div></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><strong>DocGen Template</strong></td><td><code>DocGen_Template__c</code></td><td>Stores template configuration: name, type (Word/PowerPoint), output format (Native/PDF), base object, query config, and document title format.</td></tr>
+                            <tr><td><strong>DocGen Template Version</strong></td><td><code>DocGen_Template_Version__c</code></td><td>Snapshot of a template at a point in time. Tracks the file (ContentVersion ID), query config, and active status. Only one version is active at a time.</td></tr>
+                            <tr><td><strong>DocGen Job</strong></td><td><code>DocGen_Job__c</code></td><td>Tracks bulk generation jobs. Records the template, query condition, status (Processing/Completed/Failed), and success/error counts.</td></tr>
+                            <tr><td><strong>Saved DocGen Query</strong></td><td><code>DocGen_Saved_Query__c</code></td><td>Reusable filter conditions for bulk generation. Linked to a template via master-detail.</td></tr>
+                            <tr><td><strong>DocGen Settings</strong></td><td><code>DocGen_Settings__c</code></td><td>Hierarchy custom setting for org/profile/user-level config: Experience Site URL, email branding (subject, logo, footer, brand color, message), and company name.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">E-Signature Objects</h3>
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                        <thead>
+                            <tr class="slds-line-height_reset">
+                                <th scope="col"><div class="slds-truncate">Object</div></th>
+                                <th scope="col"><div class="slds-truncate">API Name</div></th>
+                                <th scope="col"><div class="slds-truncate">Purpose</div></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><strong>Signature Request</strong></td><td><code>DocGen_Signature_Request__c</code></td><td>Parent record for a signing session. Tracks status (Draft &rarr; Sent &rarr; In Progress &rarr; Signed/Cancelled), the source document, related record ID, and a secure token. For legacy single-signer flows, also stores the signer name, email, and signature data directly.</td></tr>
+                            <tr><td><strong>Signer</strong></td><td><code>DocGen_Signer__c</code></td><td>One record per person who needs to sign. Child of Signature Request (master-detail). Stores the signer's name, email, role, sort order, status (Pending &rarr; Viewed &rarr; Signed), their unique secure token, optional Contact lookup, and the captured signature image (base64 PNG).</td></tr>
+                            <tr><td><strong>Signature Audit</strong></td><td><code>DocGen_Signature_Audit__c</code></td><td>Immutable compliance record created when a signer completes their signature. Captures: signer name/email, signed date, IP address, browser user agent, SHA-256 document hash, and links to the Signer and Contact records.</td></tr>
+                            <tr><td><strong>Signature Template</strong></td><td><code>DocGen_Signature_Template__c</code></td><td>Reusable set of signer role definitions. Saves time when you frequently send the same document type (e.g., &quot;Standard Contract&quot; with Buyer + Seller + Witness).</td></tr>
+                            <tr><td><strong>Signature Template Role</strong></td><td><code>DocGen_Signature_Template_Role__c</code></td><td>Individual role within a Signature Template. Defines the role name and sort order. Child of Signature Template (master-detail).</td></tr>
+                            <tr><td><strong>Signature PDF Event</strong></td><td><code>DocGen_Signature_PDF__e</code></td><td>Platform Event that fires when all signers have completed. Triggers the final PDF generation with all signatures stamped into the document.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="slds-box slds-theme_shade slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Signature Flow Lifecycle</h3>
+                    <ol class="slds-list_ordered">
+                        <li class="slds-var-p-bottom_x-small"><strong>Create Request</strong> &mdash; User selects a document and adds signers in the Signature Sender LWC. A parent <code>DocGen_Signature_Request__c</code> is created (Status = Sent) with child <code>DocGen_Signer__c</code> records (Status = Pending). Each signer gets a unique SHA-256 token.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Send Links</strong> &mdash; Each signer receives a secure URL containing their token. Links can be emailed (branded HTML email) or copied manually.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Validate Token</strong> &mdash; When a signer clicks their link, the system matches the token to their <code>DocGen_Signer__c</code> record, checks the 30-day expiration, and verifies they haven't already signed.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Sign</strong> &mdash; The signer reviews the document (eIDAS compliance) and draws their signature on a canvas. The signature PNG is saved to the Signer record and status updates to Signed.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Audit</strong> &mdash; A <code>DocGen_Signature_Audit__c</code> record is created capturing the signer's name, email, IP address, user agent, timestamp, and a SHA-256 hash of the document for integrity verification.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Final PDF</strong> &mdash; When all signers complete, a <code>DocGen_Signature_PDF__e</code> Platform Event fires. A trigger stamps all signature images into the DOCX at their placeholder locations, generates a final PDF, and attaches it to the original record.</li>
+                    </ol>
+                </div>
+
+                <div class="slds-box slds-theme_default">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Relationship Diagram</h3>
+                    <pre style="font-size: 11px; line-height: 1.4; background: #f4f6f9; padding: 12px; border-radius: 4px; overflow-x: auto;">
+DocGen_Template__c
+  ├── DocGen_Template_Version__c  (Master-Detail)
+  └── DocGen_Saved_Query__c      (Master-Detail)
+
+DocGen_Job__c
+  └── Template__c                (Lookup → DocGen_Template__c)
+
+DocGen_Signature_Request__c
+  ├── DocGen_Signer__c           (Master-Detail)
+  │     └── Contact__c           (Lookup → Contact)
+  └── DocGen_Signature_Audit__c  (Master-Detail)
+        ├── Signer__c            (Lookup → DocGen_Signer__c)
+        └── Contact__c           (Lookup → Contact)
+
+DocGen_Signature_Template__c
+  └── DocGen_Signature_Template_Role__c  (Master-Detail)</pre>
+                </div>
+            </template>
+
             <!-- ==================== TEMPLATE VERSIONING ==================== -->
             <template if:true={isVersions}>
                 <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Template Versioning</h2>

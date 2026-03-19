@@ -15,6 +15,7 @@ export default class DocGenAdminGuide extends LightningElement {
         { name: 'email', label: 'Email Branding & Copy', icon: 'utility:email' },
         { name: 'logo', label: 'Logo & Images', icon: 'utility:image' },
         { name: 'sharing', label: 'Sharing & Permissions', icon: 'utility:lock' },
+        { name: 'datamodel', label: 'Data Model', icon: 'utility:database' },
         { name: 'versions', label: 'Template Versioning', icon: 'utility:clock' },
         { name: 'flows', label: 'Flow & Automation', icon: 'utility:flow' },
         { name: 'troubleshooting', label: 'Troubleshooting', icon: 'utility:bug' }
@@ -43,6 +44,7 @@ export default class DocGenAdminGuide extends LightningElement {
     get isEmail() { return this.activeSection === 'email'; }
     get isLogo() { return this.activeSection === 'logo'; }
     get isSharing() { return this.activeSection === 'sharing'; }
+    get isDataModel() { return this.activeSection === 'datamodel'; }
     get isVersions() { return this.activeSection === 'versions'; }
     get isFlows() { return this.activeSection === 'flows'; }
     get isTroubleshooting() { return this.activeSection === 'troubleshooting'; }
