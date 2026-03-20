@@ -326,7 +326,7 @@ public without sharing class DocGenSignatureService {
 
         public void execute(QueueableContext ctx) {
             List<DocGen_Signature_Request__c> requests = [
-                SELECT Id, Source_Document_Id__c
+                SELECT Id, Source_Document_Id__c, Related_Record_Id__c
                 FROM DocGen_Signature_Request__c
                 WHERE Id = :requestId
                 WITH SYSTEM_MODE LIMIT 1
@@ -343,21 +343,14 @@ public without sharing class DocGenSignatureService {
                     pdfBlob = DocGenSignatureController.renderSignaturePdfFromSavedImages(requestId);
                 }
 
-                // Find related record from source document's links
-                ContentVersion source = [SELECT Title, ContentDocumentId FROM ContentVersion WHERE Id = :req.Source_Document_Id__c WITH SYSTEM_MODE LIMIT 1];
+                // Get source document title for the file name
+                ContentVersion source = [SELECT Title FROM ContentVersion WHERE Id = :req.Source_Document_Id__c WITH SYSTEM_MODE LIMIT 1];
                 String fileName = source.Title + ' - Signed';
-                String relatedRecordId = null;
-                List<ContentDocumentLink> srcLinks = [
-                    SELECT LinkedEntityId FROM ContentDocumentLink
-                    WHERE ContentDocumentId = :source.ContentDocumentId
-                    AND LinkedEntityId != :req.Id
-                    WITH SYSTEM_MODE LIMIT 1
-                ];
-                if (!srcLinks.isEmpty()) {
-                    relatedRecordId = srcLinks[0].LinkedEntityId;
-                }
 
-                if (relatedRecordId != null) {
+                // Use Related_Record_Id__c directly — set when the request was created
+                String relatedRecordId = req.Related_Record_Id__c;
+
+                if (String.isNotBlank(relatedRecordId)) {
                     ContentVersion pdfCv = new ContentVersion();
                     pdfCv.Title = fileName;
                     pdfCv.PathOnClient = fileName + '.pdf';

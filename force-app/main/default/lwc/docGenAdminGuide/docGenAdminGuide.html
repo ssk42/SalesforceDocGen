@@ -381,12 +381,13 @@
 
                 <div class="slds-box slds-theme_default">
                     <h3 class="slds-text-heading_small slds-var-m-bottom_small">Signature Placeholders</h3>
-                    <p class="slds-var-m-bottom_small">To mark where signatures should appear in a document:</p>
+                    <p class="slds-var-m-bottom_small">To mark where signatures should appear in a document, <strong>always include a role name</strong>:</p>
                     <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
-                        <code>&#123;#Signature&#125;</code> — Generic signature placeholder (single signer)<br/>
-                        <code>&#123;#Signature_Client&#125;</code> — Named role placeholder for "Client"<br/>
-                        <code>&#123;#Signature_Witness&#125;</code> — Named role placeholder for "Witness"
+                        <code>&#123;#Signature_Buyer&#125;</code> — Where the buyer signs<br/>
+                        <code>&#123;#Signature_Seller&#125;</code> — Where the seller signs<br/>
+                        <code>&#123;#Signature_Witness&#125;</code> — Where the witness signs
                     </div>
+                    <p class="slds-var-m-bottom_x-small"><strong>Best practice:</strong> Always use the <code>&#123;#Signature_RoleName&#125;</code> format — even for single-signer documents. This ensures consistent behavior and makes it easy to add more signers later.</p>
                     <p class="slds-text-body_small slds-text-color_weak">When the document is signed, the placeholder is replaced with the signer's handwritten signature image plus a timestamp.</p>
                 </div>
             </template>
@@ -559,7 +560,7 @@
                         <li class="slds-var-p-bottom_x-small">Role names follow the format <code>&#123;#Signature_RoleName&#125;</code> in the template.</li>
                         <li class="slds-var-p-bottom_x-small">Use underscores for multi-word roles: <code>&#123;#Signature_Account_Executive&#125;</code></li>
                         <li class="slds-var-p-bottom_x-small">Role names are case-sensitive and must match exactly between the template and the signer assignment.</li>
-                        <li class="slds-var-p-bottom_x-small">For single-signer documents, use the generic <code>&#123;#Signature&#125;</code> placeholder (no role suffix).</li>
+                        <li class="slds-var-p-bottom_x-small">For single-signer documents, still use a role: <code>&#123;#Signature_Signer&#125;</code> or <code>&#123;#Signature_Buyer&#125;</code>. This ensures consistent routing.</li>
                     </ul>
                 </div>
 
