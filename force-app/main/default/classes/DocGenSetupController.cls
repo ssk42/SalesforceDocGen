@@ -23,21 +23,4 @@ public with sharing class DocGenSetupController {
         upsert settings;
     }
 
-    @AuraEnabled
-    public static void saveEmailBrandingSettings(String companyName, String logoUrl, String brandColor, String emailSubject, String emailMessage, String footerText) {
-        if (!FeatureManagement.checkPermission('DocGen_Admin_Access') &&
-            !Schema.sObjectType.DocGen_Settings__c.isUpdateable()) {
-            throw new AuraHandledException('Insufficient privileges to modify DocGen settings.');
-        }
-        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
-        settings.Company_Name__c = companyName;
-        settings.Signature_Email_Logo_Url__c = logoUrl;
-        settings.Signature_Email_Brand_Color__c = brandColor;
-        settings.Signature_Email_Subject__c = emailSubject;
-        settings.Signature_Email_Message__c = emailMessage;
-        settings.Signature_Email_Footer_Text__c = footerText;
-        // Package-internal object — CRUD controlled by DocGen permission sets
-        upsert settings;
-    }
-
 }

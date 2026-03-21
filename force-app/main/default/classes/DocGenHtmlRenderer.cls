@@ -58,6 +58,17 @@ public with sharing class DocGenHtmlRenderer {
      * @return HTML string ready for Blob.toPdf()
      */
     public static String convertToHtml(String documentXml, Map<String, String> images) {
+        return convertToHtml(documentXml, images, null);
+    }
+
+    /**
+     * Converts document XML to HTML with custom font CSS injected into the style block.
+     * @param documentXml The processed word/document.xml content (post-merge)
+     * @param images Map of relationship IDs to image URLs or base64 data
+     * @param fontFaceCss @font-face CSS declarations to inject (null = no custom fonts)
+     * @return HTML string ready for Blob.toPdf()
+     */
+    public static String convertToHtml(String documentXml, Map<String, String> images, String fontFaceCss) {
         if (String.isBlank(documentXml)) {
             return HTML_PREFIX + HTML_SUFFIX;
         }
@@ -68,6 +79,32 @@ public with sharing class DocGenHtmlRenderer {
         String bodyContent = extractBodyContent(documentXml);
         String html = processBodyContent(bodyContent, images);
 
+        // Inject custom @font-face declarations before the base styles
+        if (String.isNotBlank(fontFaceCss)) {
+            String prefix = '<html><head><style>' + fontFaceCss +
+                '@page { size: letter; margin: 1in; }' +
+                'body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }' +
+                'h1 { font-size: 20pt; font-weight: bold; margin: 0 0 6pt 0; }' +
+                'h2 { font-size: 16pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+                'h3 { font-size: 14pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+                'h4 { font-size: 12pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+                'h5 { font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+                'h6 { font-size: 10pt; font-weight: bold; margin: 0 0 4pt 0; }' +
+                'h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }' +
+                'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }' +
+                'tr { page-break-inside: avoid; page-break-after: auto; }' +
+                'td, th { padding: 4pt; vertical-align: top; }' +
+                'p { margin: 0 0 8pt 0; orphans: 2; widows: 2; page-break-inside: avoid; }' +
+                'img { max-width: 100%; }' +
+                'ul, ol { margin: 0 0 8pt 0; padding-left: 36pt; }' +
+                'li { margin: 0 0 2pt 0; page-break-inside: avoid; }' +
+                'hr { border: none; border-top: 1px solid #000; margin: 6pt 0; }' +
+                'sub { vertical-align: sub; font-size: 0.8em; }' +
+                'sup { vertical-align: super; font-size: 0.8em; }' +
+                '</style></head><body>';
+            return prefix + html + HTML_SUFFIX;
+        }
+
         return HTML_PREFIX + html + HTML_SUFFIX;
     }
 
@@ -75,7 +112,7 @@ public with sharing class DocGenHtmlRenderer {
      * Overload for when no images are present.
      */
     public static String convertToHtml(String documentXml) {
-        return convertToHtml(documentXml, new Map<String, String>());
+        return convertToHtml(documentXml, new Map<String, String>(), null);
     }
 
     /**

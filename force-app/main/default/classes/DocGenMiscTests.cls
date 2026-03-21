@@ -893,34 +893,6 @@ private class DocGenMiscTests {
     // DocGenSetupController — additional coverage
     // =========================================================================
 
-    @isTest
-    static void testSaveEmailBrandingSettings() {
-        Test.startTest();
-        DocGenSetupController.saveEmailBrandingSettings(
-            'Acme Corp', 'https://logo.png', '#FF5733', 'Please Sign {DocumentTitle}', 'Custom message here', 'Footer text here'
-        );
-        Test.stopTest();
-
-        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
-        System.assertEquals('Acme Corp', settings.Company_Name__c);
-        System.assertEquals('https://logo.png', settings.Signature_Email_Logo_Url__c);
-        System.assertEquals('#FF5733', settings.Signature_Email_Brand_Color__c);
-        System.assertEquals('Please Sign {DocumentTitle}', settings.Signature_Email_Subject__c);
-        System.assertEquals('Footer text here', settings.Signature_Email_Footer_Text__c);
-    }
-
-    @isTest
-    static void testSaveEmailBrandingSettingsUpdatesExisting() {
-        DocGenSetupController.saveEmailBrandingSettings('First', null, null, null, null, null);
-
-        Test.startTest();
-        DocGenSetupController.saveEmailBrandingSettings('Second', 'https://logo2.png', '#000000', 'Subject2', 'Message2', 'Footer2');
-        Test.stopTest();
-
-        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
-        System.assertEquals('Second', settings.Company_Name__c);
-    }
-
     // =========================================================================
     // DocGenFlowAction — success path coverage
     // =========================================================================
@@ -2105,26 +2077,6 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('title'));
     }
 
-    // =========================================================================
-    // DocGenService — cleanupTempImages
-    // =========================================================================
-
-    @isTest
-    static void testCleanupTempImages_Blank() {
-        Test.startTest();
-        DocGenService.cleanupTempImages('');
-        DocGenService.cleanupTempImages(null);
-        Test.stopTest();
-        System.assert(true, 'Should return silently for blank key');
-    }
-
-    @isTest
-    static void testCleanupTempImages_NoMatch() {
-        Test.startTest();
-        DocGenService.cleanupTempImages('nonexistentbatchkeyvalue12345');
-        Test.stopTest();
-        System.assert(true, 'Should handle no matching temp images gracefully');
-    }
 
     // =========================================================================
     // DocGenService — generateDocument PDF save path
