@@ -2,7 +2,7 @@
 
 **A free, native, production-ready document engine for Salesforce.**
 
-[![Version](https://img.shields.io/badge/version-1.3.4-blue.svg)](#quick-install)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](#quick-install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![API Version](https://img.shields.io/badge/API-v66.0-orange.svg)](#)
@@ -17,6 +17,8 @@ Generate DOCX, PPTX, and PDF documents from any Salesforce record. Merge fields,
 
 - [Why This Exists](#why-this-exists)
 - [Quick Install](#quick-install)
+- [What's New in v1.4.0](#whats-new-in-v140)
+- [What's New in v1.3.4](#whats-new-in-v134)
 - [What's New in v1.2.2](#whats-new-in-v122)
 - [What's New in v1.2.0](#whats-new-in-v120)
 - [What's New in v1.1.1](#whats-new-in-v111)
@@ -58,16 +60,16 @@ This project gives you a professional-grade document engine -- template manageme
 
 ## Quick Install
 
-**Package Version ID**: `04tdL000000RdDNQA0`
+**Package Version ID**: `04tdL000000RdlFQAS`
 
 **CLI:**
 ```bash
-sf package install --package 04tdL000000RdDNQA0 --wait 10 --installation-key-bypass
+sf package install --package 04tdL000000RdlFQAS --wait 10 --installation-key-bypass
 ```
 
 **Browser:**
-- [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RdDNQA0)
-- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RdDNQA0)
+- [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RdlFQAS)
+- [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RdlFQAS)
 
 > Select **Install for Admins Only** during installation, then assign permission sets to your users.
 
@@ -88,6 +90,44 @@ DocGen runs 100% on the Salesforce platform, which means it operates within [Ape
 **Large Documents & Images** — Because PDF rendering and image injection happen server-side, memory usage climbs with each image. If your documents include multiple images, use optimized/low-resolution versions to avoid `LimitException: Apex heap size too large`.
 
 **Is this right for you?** — If your use case consistently requires documents or image data larger than these limits, this tool may not be the right fit in its current state. For very large documents, consider the [client-side generation option](https://github.com/DaveMoudy/SalesforceDocGen/issues/23) which offloads assembly to the browser.
+
+## What's New in v1.4.0
+
+### Template-Based Signature Flow
+
+E-signatures no longer require a pre-generated DOCX per record. The admin selects a DocGen template directly, and the system merges it with live record data at signing time -- rendering straight to PDF with zero DOCX intermediate.
+
+**How it works under the hood:**
+
+When a template version is saved, DocGen deconstructs the DOCX ZIP file -- extracting each XML part (`document.xml`, `_rels`, headers, footers) and every embedded image into individual ContentVersion records. This pre-decomposition means PDF generation never needs to decompress a ZIP at runtime.
+
+When an admin creates a signature request, the system pre-computes the full image map (template images + dynamic images from record fields) and caches a preview with public download URLs. This solves Salesforce's content sharing restrictions -- guest users on the signing page see a fully rendered document preview with all images, even though they have no Salesforce session.
+
+When all signers complete their signatures, a single Queueable job:
+1. Loads the pre-decomposed template XML (no ZIP decompression)
+2. Merges it with live record data (field substitution, child loops, conditional sections)
+3. Stamps each signature as DrawingML directly into the merged XML -- pure string operations, no ZIP assembly
+4. Passes the result to `Blob.toPdf()` with relative ContentVersion URLs -- the PDF engine resolves images by URL with zero Apex heap cost
+
+The result: signed PDFs with 20+ embedded images (up to 30MB total image data) and 500+ child record rows generate successfully within Salesforce governor limits.
+
+**What changed for users:**
+- Signature Sender component now shows a **template picker** (primary) with legacy document picker as fallback
+- Templates auto-scan for `{#Signature_*}` placeholders and pre-populate signer roles
+- Document preview on the signing page shows the fully merged document with all record data and images
+- No need to generate a DOCX first -- go straight from template to signatures to signed PDF
+
+### DOCX Output: Download Only
+- "Save to Record" option is now only available for PDF output
+- DOCX generation uses client-side ZIP assembly which exceeds the Aura 4MB payload limit for save operations
+- Download works for any size
+
+### Updated Page Layouts
+- Signature Request layout: added Template lookup field, reorganized sections
+- Signature Audit layout: streamlined verification and client details
+- Signer layout: removed internal Security section
+
+---
 
 ## What's New in v1.3.4
 
@@ -316,9 +356,8 @@ When all signers complete their signatures, the following chain executes automat
 
 1. The last signer's completion publishes a **Platform Event** (`DocGen_Signature_PDF__e`)
 2. A **trigger** fires and enqueues a Queueable job (runs as the **Automated Process user**)
-3. **Stage 1** stamps all signature images into the DOCX and saves the result as ContentVersion files on the Signature Request record
-4. **Stage 2** (chained Queueable) reads those committed files, generates HTML with ContentVersion download URLs, and calls `Blob.toPdf()` to produce the final PDF
-5. The signed PDF is saved to the **original record** (Account, Opportunity, etc.) and an audit trail is created
+3. The Queueable loads pre-decomposed template XML, merges with record data, stamps signatures into the XML, and renders PDF via `Blob.toPdf()` -- all in a single transaction with no DOCX intermediate
+4. The signed PDF is saved to the **original record** (Account, Opportunity, etc.) and an audit trail is created
 
 The Automated Process user has full data access via `SYSTEM_MODE` queries and `AccessLevel.SYSTEM_MODE` DML. It does **not** need permission sets for object access. However, it **does** require the Spring '26 `Blob.toPdf()` Release Update for proper PDF rendering since it cannot access Visualforce pages.
 
@@ -461,11 +500,11 @@ Role names use underscores for spaces. When signed, the placeholder is replaced 
 
 ### How It Works
 
-1. **Generate a document** with signature placeholders in the template
-2. **Send for signature** from the Signature Sender component on the record page
+1. **Create a template** with signature placeholders (`{#Signature_Buyer}`, `{#Signature_Seller}`, etc.)
+2. **Send for signature** from the Signature Sender component -- select the template, assign contacts to roles
 3. **Signers receive branded emails** with secure links
-4. **Signers review and sign** on a public page with a signature pad
-5. **Signed PDF is generated** with all signatures stamped in place
+4. **Signers review the merged document** and sign on a public page with a signature pad
+5. **Signed PDF is generated** -- template merged with record data, signatures stamped, all in one step
 6. **Audit trail** records signer name, email, IP, browser, timestamp, and SHA-256 hash
 
 ### Signature Roles
@@ -552,7 +591,7 @@ Template (.docx/.pptx)
 | `DocGenHtmlRenderer` | DOCX XML to HTML conversion for `Blob.toPdf()` |
 | `DocGenController` | LWC controller -- template CRUD, generation, versioning |
 | `DocGenDataRetriever` | Dynamic SOQL with Schema validation |
-| `DocGenSignatureService` | Signature stamping via OpenXML manipulation |
+| `DocGenSignatureService` | Signature stamping -- XML string ops for template flow, OpenXML ZIP for legacy DOCX flow |
 | `DocGenSignatureEmailService` | Branded HTML email generation |
 | `DocGenBatch` | Batch Apex for bulk generation |
 
@@ -579,6 +618,20 @@ Open the **DocGen Admin Guide** tab in the DocGen app to access it.
 ---
 
 ## Changelog
+
+### v1.4.0
+- **Template-Based Signatures** -- E-signatures use DocGen templates directly; no pre-generated DOCX needed. Single-stage Queueable: merge XML + stamp signatures + render PDF. Zero ZIP operations.
+- **Pre-Computed Preview** -- Fully merged document preview with public image URLs cached at request creation. Guest users see the real document on the signing page.
+- **Content Sharing Workaround** -- Image map pre-computed by admin and cached on the request record. Automated Process user reads cached data instead of querying template CVs.
+- **DOCX Download Only** -- Save to Record removed for DOCX output (Aura 4MB payload limit). Download works for any size.
+- **Stress Tested** -- 20 unique 1.3MB images + 500 child records + multi-signer signatures. Signed PDF generated within governor limits.
+
+### v1.3.4
+- **Zero-Heap PDF Images** -- `{%ImageField}` tags skip blob loading for PDF; images resolved by URL with zero heap cost
+- **Pre-Decomposed Templates** -- Template XML stored as ContentVersions on save; PDF generation skips ZIP decompression (~75% heap reduction)
+- **PDF Image Fix** -- Relative Salesforce URLs for `Blob.toPdf()` compatibility
+- **Bold Space Fix** -- Preserved whitespace between adjacent bold merge fields
+- **Encoding Fix** -- `&` no longer double-encoded in PDF output
 
 ### v1.1.1
 - **Signature Fix** (#28) -- Single-signer flow no longer fails; uses `isSignerToken` flag for correct routing
