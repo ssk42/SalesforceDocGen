@@ -494,9 +494,17 @@
                         </template>
                     </div>
                 </div>
-                <footer class="slds-modal__footer">
-                    <lightning-button label="Cancel" onclick={handleCloseReportModal}></lightning-button>
-                    <lightning-button label="Import" variant="brand" disabled={isImportDisabled} onclick={handleImportReport} class="slds-var-m-left_x-small"></lightning-button>
+                <footer class="slds-modal__footer slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
+                    <template if:true={selectedReportName}>
+                        <span class="slds-text-body_small"><strong>Selected:</strong> {selectedReportName}</span>
+                    </template>
+                    <template if:false={selectedReportName}>
+                        <span class="slds-text-body_small slds-text-color_weak">Select a report from the list above</span>
+                    </template>
+                    <div>
+                        <lightning-button label="Cancel" onclick={handleCloseReportModal}></lightning-button>
+                        <lightning-button label="Import" variant="brand" disabled={isImportDisabled} onclick={handleImportReport} class="slds-var-m-left_x-small"></lightning-button>
+                    </div>
                 </footer>
             </div>
         </section>

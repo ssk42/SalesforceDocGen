@@ -1278,7 +1278,7 @@ export default class DocGenQueryBuilder extends LightningElement {
                     label: r.name + (r.folder ? ' (' + r.folder + ')' : ''),
                     isSelected: r.id === this.selectedReportId,
                     optionClass: 'slds-media slds-listbox__option slds-listbox__option_plain slds-media_small' +
-                        (r.id === this.selectedReportId ? ' slds-is-selected' : '')
+                        (r.id === this.selectedReportId ? ' slds-is-selected slds-theme_shade' : '')
                 }));
             })
             .catch(() => {
@@ -1294,7 +1294,7 @@ export default class DocGenQueryBuilder extends LightningElement {
             ...r,
             isSelected: r.id === this.selectedReportId,
             optionClass: 'slds-media slds-listbox__option slds-listbox__option_plain slds-media_small' +
-                (r.id === this.selectedReportId ? ' slds-is-selected' : '')
+                (r.id === this.selectedReportId ? ' slds-is-selected slds-theme_shade' : '')
         }));
     }
 

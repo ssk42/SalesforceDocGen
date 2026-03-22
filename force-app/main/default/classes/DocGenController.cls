@@ -683,49 +683,169 @@ public with sharing class DocGenController {
         for (SObjectField sof : fieldMap.values()) {
             Schema.DescribeFieldResult dfr = sof.getDescribe();
             if (dfr.getRelationshipName() != null && dfr.getReferenceTo() != null && !dfr.getReferenceTo().isEmpty()) {
-                // Map the referenced object's label/name to the relationship name
                 String refObjName = dfr.getReferenceTo()[0].getDescribe().getName().toUpperCase();
                 parentPrefixMap.put(refObjName, dfr.getRelationshipName());
-                // Also map common report prefixes
                 if (dfr.getName() == 'OwnerId') parentPrefixMap.put('USERS', dfr.getRelationshipName());
                 if (dfr.getName() == 'CreatedById') parentPrefixMap.put('CREATED_BY', dfr.getRelationshipName());
             }
         }
 
-        // Normalize report columns to SOQL field names
+        // For cross-object reports (OpportunityContactProduct), build child object field maps
+        // so we can route columns like FIRST_NAME to the Contact child, PRODUCT_NAME to LineItems
+        Map<String, String> childRelNameByObject = new Map<String, String>();
+        Map<String, Map<String, SObjectField>> childFieldMaps = new Map<String, Map<String, SObjectField>>();
+        Map<String, Map<String, String>> childLabelMaps = new Map<String, Map<String, String>>();
+        Map<String, Map<String, String>> childProperCaseMaps = new Map<String, Map<String, String>>();
+
+        // Detect child objects from the report type name
+        Map<String, String> reportTypeChildObjects = new Map<String, String>{
+            'OpportunityContactProduct' => 'Contact,OpportunityLineItem',
+            'OpportunityContact' => 'Contact',
+            'OpportunityProduct' => 'OpportunityLineItem',
+            'AccountContact' => 'Contact',
+            'CaseContact' => 'Contact'
+        };
+
+        if (reportTypeChildObjects.containsKey(reportTypeName)) {
+            for (String childObjName : reportTypeChildObjects.get(reportTypeName).split(',')) {
+                // Find the relationship name for this child on the base object
+                Boolean found = false;
+                for (Schema.ChildRelationship cr : objType.getDescribe().getChildRelationships()) {
+                    if (cr.getChildSObject().getDescribe().getName() == childObjName && cr.getRelationshipName() != null) {
+                        childRelNameByObject.put(childObjName, cr.getRelationshipName());
+                        found = true;
+                        break;
+                    }
+                }
+                // If not a direct child (e.g., Contact via OpportunityContactRole), skip SOQL routing
+                // but still build the field map for label-based column detection
+                if (!found) {
+                    // Contact on Opportunity goes through OpportunityContactRoles
+                    // We'll detect its fields but can't auto-build a subquery
+                    childRelNameByObject.put(childObjName, '__junction_' + childObjName);
+                }
+
+                // Build field maps for label matching regardless
+                SObjectType childType = Schema.getGlobalDescribe().get(childObjName);
+                if (childType != null) {
+                    Map<String, SObjectField> cfm = childType.getDescribe().fields.getMap();
+                    childFieldMaps.put(childObjName, cfm);
+                    Map<String, String> clm = new Map<String, String>();
+                    Map<String, String> cpm = new Map<String, String>();
+                    for (String fn : cfm.keySet()) {
+                        Schema.DescribeFieldResult cdfr = cfm.get(fn).getDescribe();
+                        clm.put(cdfr.getLabel().toLowerCase(), cdfr.getName());
+                        cpm.put(fn.toLowerCase(), cdfr.getName());
+                    }
+                    childLabelMaps.put(childObjName, clm);
+                    childProperCaseMaps.put(childObjName, cpm);
+                }
+            }
+        }
+
+        // Hardcoded report column key → {object, fieldApiName} for columns that
+        // don't match by label (report labels differ from field labels)
+        Map<String, Map<String, String>> reportKeyOverrides = new Map<String, Map<String, String>>{
+            'PRODUCT_NAME' => new Map<String, String>{ 'object' => 'OpportunityLineItem', 'field' => 'Name' },
+            'QUANTITY' => new Map<String, String>{ 'object' => 'OpportunityLineItem', 'field' => 'Quantity' },
+            'TOTAL_PRICE' => new Map<String, String>{ 'object' => 'OpportunityLineItem', 'field' => 'TotalPrice' },
+            'UNIT_PRICE' => new Map<String, String>{ 'object' => 'OpportunityLineItem', 'field' => 'UnitPrice' },
+            'PHONE1' => new Map<String, String>{ 'object' => 'Contact', 'field' => 'Phone' },
+            'PHONE2' => new Map<String, String>{ 'object' => 'Contact', 'field' => 'HomePhone' },
+            'PHONE3' => new Map<String, String>{ 'object' => 'Contact', 'field' => 'MobilePhone' }
+        };
+
+        // Normalize report columns — route to base, parent, or child
         List<String> detailColumns = metadata.getDetailColumns();
         Map<String, Reports.DetailColumn> columnInfo = extMeta.getDetailColumnInfo();
         List<String> normalizedFields = new List<String>();
         List<String> parentFields = new List<String>();
+        Map<String, List<String>> childFields = new Map<String, List<String>>();
 
         for (String colKey : detailColumns) {
             Reports.DetailColumn col = columnInfo.get(colKey);
             String colLabel = (col != null) ? col.getLabel() : null;
+            Boolean mapped = false;
 
-            // Check if this is a parent relationship column (e.g., USERS.NAME)
-            // But NOT if the prefix matches the base object (ACCOUNT.NAME on Account = the record's own Name)
-            if (colKey.contains('.')) {
+            // 0. Check hardcoded overrides for columns with mismatched labels
+            if (reportKeyOverrides.containsKey(colKey)) {
+                Map<String, String> override_info = reportKeyOverrides.get(colKey);
+                String targetObj = override_info.get('object');
+                String targetField = override_info.get('field');
+                String relName = childRelNameByObject.get(targetObj);
+                if (relName != null) {
+                    if (!childFields.containsKey(relName)) childFields.put(relName, new List<String>());
+                    if (!childFields.get(relName).contains(targetField)) childFields.get(relName).add(targetField);
+                    mapped = true;
+                }
+            }
+
+            // 1. Check parent prefix (USERS.NAME, ACCOUNT.NAME on non-Account base)
+            if (!mapped && colKey.contains('.')) {
                 String prefix = colKey.substringBefore('.').toUpperCase();
                 String childField = colKey.substringAfter('.');
                 Boolean isSelfPrefix = prefix.equalsIgnoreCase(baseObject) ||
-                    prefix.equalsIgnoreCase(baseObject.removeEnd('__c'));
-                if (!isSelfPrefix && parentPrefixMap.containsKey(prefix)) {
+                    prefix.equalsIgnoreCase(baseObject.removeEnd('__c')) ||
+                    (baseObject == 'Opportunity' && prefix == 'OPPORTUNITY');
+                if (isSelfPrefix) {
+                    // Base object's own field — normalize the field part
+                    String fieldName = normalizeReportColumn(childField, colLabel, fieldMap, labelToApiName, properCaseMap);
+                    if (fieldName != null && !normalizedFields.contains(fieldName)) {
+                        normalizedFields.add(fieldName);
+                    }
+                    mapped = true;
+                } else if (parentPrefixMap.containsKey(prefix)) {
                     String relName = parentPrefixMap.get(prefix);
-                    // Resolve the child field name on the referenced object
                     String parentFieldName = resolveParentFieldName(relName, childField, colLabel, fieldMap);
                     if (parentFieldName != null) {
                         String fullPath = relName + '.' + parentFieldName;
-                        if (!parentFields.contains(fullPath)) {
-                            parentFields.add(fullPath);
-                        }
-                        continue;
+                        if (!parentFields.contains(fullPath)) parentFields.add(fullPath);
+                        mapped = true;
                     }
                 }
             }
 
-            String fieldName = normalizeReportColumn(colKey, colLabel, fieldMap, labelToApiName, properCaseMap);
-            if (fieldName != null && !normalizedFields.contains(fieldName)) {
-                normalizedFields.add(fieldName);
+            // 2. Check hardcoded owner mapping
+            if (!mapped && colKey == 'OWNER_FULL_NAME') {
+                if (!parentFields.contains('Owner.Name')) parentFields.add('Owner.Name');
+                mapped = true;
+            }
+
+            // 3. Try to route to a child object by label matching
+            if (!mapped && !childFieldMaps.isEmpty()) {
+                for (String childObjName : childFieldMaps.keySet()) {
+                    Map<String, String> clm = childLabelMaps.get(childObjName);
+                    Map<String, String> cpm = childProperCaseMaps.get(childObjName);
+                    Map<String, SObjectField> cfm = childFieldMaps.get(childObjName);
+                    String relName = childRelNameByObject.get(childObjName);
+
+                    // Try label match on child object
+                    String childFieldName = null;
+                    if (String.isNotBlank(colLabel) && clm.containsKey(colLabel.toLowerCase())) {
+                        childFieldName = clm.get(colLabel.toLowerCase());
+                    }
+                    // Try direct key match
+                    if (childFieldName == null) {
+                        childFieldName = normalizeReportColumn(colKey, colLabel, cfm, clm, cpm);
+                    }
+
+                    if (childFieldName != null) {
+                        if (!childFields.containsKey(relName)) childFields.put(relName, new List<String>());
+                        if (!childFields.get(relName).contains(childFieldName)) {
+                            childFields.get(relName).add(childFieldName);
+                        }
+                        mapped = true;
+                        break;
+                    }
+                }
+            }
+
+            // 4. Fall through: try base object normalization
+            if (!mapped) {
+                String fieldName = normalizeReportColumn(colKey, colLabel, fieldMap, labelToApiName, properCaseMap);
+                if (fieldName != null && !normalizedFields.contains(fieldName)) {
+                    normalizedFields.add(fieldName);
+                }
             }
         }
 
@@ -744,10 +864,21 @@ public with sharing class DocGenController {
             }
         }
 
+        // Build child subqueries for the query config (skip junction-based children)
+        List<String> childSubqueries = new List<String>();
+        for (String relName : childFields.keySet()) {
+            List<String> fields = childFields.get(relName);
+            if (!fields.isEmpty() && !relName.startsWith('__junction_')) {
+                childSubqueries.add('(SELECT ' + String.join(fields, ', ') + ' FROM ' + relName + ')');
+            }
+        }
+
         return new Map<String, Object>{
             'baseObject' => baseObject,
             'fields' => normalizedFields,
             'parentFields' => parentFields,
+            'childSubqueries' => childSubqueries,
+            'childFields' => childFields,
             'filters' => filters,
             'reportName' => metadata.getName(),
             'fieldCount' => normalizedFields.size() + parentFields.size(),
@@ -818,7 +949,13 @@ public with sharing class DocGenController {
             'SolutionList' => 'Solution',
             'UserList' => 'User',
             'AccountContactRole' => 'Account',
-            'OpportunityLineItem' => 'Opportunity'
+            'OpportunityLineItem' => 'Opportunity',
+            'OpportunityProduct' => 'Opportunity',
+            'OpportunityContactProduct' => 'Opportunity',
+            'OpportunityContact' => 'Opportunity',
+            'AccountContact' => 'Account',
+            'CaseContact' => 'Case',
+            'CampaignMember' => 'Campaign'
         };
 
         if (standardMappings.containsKey(reportTypeName)) {
