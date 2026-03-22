@@ -668,13 +668,25 @@ public with sharing class DocGenController {
         }
         Map<String, SObjectField> fieldMap = objType.getDescribe().fields.getMap();
 
+        // Build label → proper API name map, and lowercase key → proper API name map
+        Map<String, String> labelToApiName = new Map<String, String>();
+        Map<String, String> properCaseMap = new Map<String, String>();
+        for (String apiName : fieldMap.keySet()) {
+            Schema.DescribeFieldResult dfr = fieldMap.get(apiName).getDescribe();
+            String properName = dfr.getName(); // Proper-cased: 'BillingState', 'Name', etc.
+            labelToApiName.put(dfr.getLabel().toLowerCase(), properName);
+            properCaseMap.put(apiName.toLowerCase(), properName);
+        }
+
         // Normalize report columns to SOQL field names
         List<String> detailColumns = metadata.getDetailColumns();
         Map<String, Reports.DetailColumn> columnInfo = extMeta.getDetailColumnInfo();
         List<String> normalizedFields = new List<String>();
 
         for (String colKey : detailColumns) {
-            String fieldName = normalizeReportColumn(colKey, fieldMap);
+            Reports.DetailColumn col = columnInfo.get(colKey);
+            String colLabel = (col != null) ? col.getLabel() : null;
+            String fieldName = normalizeReportColumn(colKey, colLabel, fieldMap, labelToApiName, properCaseMap);
             if (fieldName != null && !normalizedFields.contains(fieldName)) {
                 normalizedFields.add(fieldName);
             }
@@ -683,7 +695,9 @@ public with sharing class DocGenController {
         // Convert report filters to a simple list
         List<Map<String, String>> filters = new List<Map<String, String>>();
         for (Reports.ReportFilter rf : metadata.getReportFilters()) {
-            String filterField = normalizeReportColumn(rf.getColumn(), fieldMap);
+            Reports.DetailColumn filterCol = columnInfo.get(rf.getColumn());
+            String filterLabel = (filterCol != null) ? filterCol.getLabel() : null;
+            String filterField = normalizeReportColumn(rf.getColumn(), filterLabel, fieldMap, labelToApiName, properCaseMap);
             if (filterField != null) {
                 filters.add(new Map<String, String>{
                     'field' => filterField,
@@ -755,62 +769,78 @@ public with sharing class DocGenController {
 
     /**
      * Normalizes a report column key to a SOQL field API name.
-     * Report columns come as 'ACCOUNT.NAME', 'CUST_FIELD__c', 'CREATED_DATE', etc.
+     *
+     * Report columns use internal identifiers (ACCOUNT.NAME, ADDRESS1_STATE, DUE_DATE)
+     * that don't match SOQL field API names. We use a multi-strategy approach:
+     *   1. Direct API name match
+     *   2. Label-based matching (report label → field label → API name)
+     *   3. Hardcoded mappings for common report columns
      */
-    private static String normalizeReportColumn(String columnKey, Map<String, SObjectField> fieldMap) {
+    private static String normalizeReportColumn(String columnKey, String columnLabel,
+            Map<String, SObjectField> fieldMap, Map<String, String> labelToApiName,
+            Map<String, String> properCaseMap) {
         if (String.isBlank(columnKey)) return null;
 
-        // Direct match
-        if (fieldMap.containsKey(columnKey)) return columnKey;
+        // Skip owner/user columns (parent lookups, not direct fields)
+        if (columnKey.startsWith('USERS.')) return null;
 
-        // Strip object prefix: 'ACCOUNT.NAME' → 'NAME'
+        // 1. Label-based matching — most reliable for standard fields
+        // Report labels like "Billing State/Province" map precisely to field labels
+        if (String.isNotBlank(columnLabel) && labelToApiName.containsKey(columnLabel.toLowerCase())) {
+            return labelToApiName.get(columnLabel.toLowerCase());
+        }
+
+        // 2. Direct API name match (works for custom fields like MyField__c)
+        if (fieldMap.containsKey(columnKey)) {
+            return properCaseMap.get(columnKey.toLowerCase());
+        }
+
+        // Strip object prefix: ACCOUNT.NAME → NAME
         String fieldPart = columnKey;
         if (columnKey.contains('.')) {
             fieldPart = columnKey.substringAfter('.');
         }
-
-        // Try direct match on field part
-        if (fieldMap.containsKey(fieldPart)) return fieldPart;
-
-        // Case-insensitive match
-        for (String key : fieldMap.keySet()) {
-            if (key.equalsIgnoreCase(fieldPart)) return key;
+        if (fieldMap.containsKey(fieldPart)) {
+            return properCaseMap.get(fieldPart.toLowerCase());
         }
 
-        // Common report-to-SOQL mappings
-        Map<String, String> commonMappings = new Map<String, String>{
+        // 3. Hardcoded mappings for report-specific column keys that don't match labels
+        Map<String, String> reportKeyMappings = new Map<String, String>{
             'CREATED_DATE' => 'CreatedDate',
             'LAST_UPDATE' => 'LastModifiedDate',
-            'CREATED' => 'CreatedDate',
-            'DUE_DATE' => 'CloseDate',
+            'DUE_DATE' => 'LastActivityDate',
             'CLOSE_DATE' => 'CloseDate',
             'AMOUNT' => 'Amount',
-            'ACCOUNT_NAME' => 'Account.Name',
-            'CONTACT_NAME' => 'Contact.Name',
             'FULL_NAME' => 'Name',
             'FIRST_NAME' => 'FirstName',
             'LAST_NAME' => 'LastName',
-            'TITLE' => 'Title',
-            'EMAIL' => 'Email',
-            'PHONE' => 'Phone',
             'STAGE_NAME' => 'StageName',
-            'TYPE' => 'Type',
-            'DESCRIPTION' => 'Description',
-            'INDUSTRY' => 'Industry',
-            'OWNER' => 'Owner.Name',
-            'RECORDTYPE' => 'RecordType.Name'
+            'ADDRESS1_STREET' => 'BillingStreet',
+            'ADDRESS1_CITY' => 'BillingCity',
+            'ADDRESS1_STATE' => 'BillingState',
+            'ADDRESS1_ZIP' => 'BillingPostalCode',
+            'ADDRESS1_COUNTRY' => 'BillingCountry',
+            'ADDRESS2_STREET' => 'ShippingStreet',
+            'ADDRESS2_CITY' => 'ShippingCity',
+            'ADDRESS2_STATE' => 'ShippingState',
+            'ADDRESS2_ZIP' => 'ShippingPostalCode',
+            'ADDRESS2_COUNTRY' => 'ShippingCountry',
+            'ACCOUNT_ID' => 'AccountId',
+            'CONTACT_ID' => 'ContactId'
         };
 
-        if (commonMappings.containsKey(fieldPart.toUpperCase())) {
-            return commonMappings.get(fieldPart.toUpperCase());
+        String upperKey = fieldPart.toUpperCase();
+        if (reportKeyMappings.containsKey(upperKey)) {
+            String mapped = reportKeyMappings.get(upperKey);
+            if (fieldMap.containsKey(mapped)) return mapped;
         }
 
-        // Try with __c suffix
+        // 4. Try with __c suffix for custom fields
         if (!fieldPart.endsWithIgnoreCase('__c') && fieldMap.containsKey(fieldPart + '__c')) {
-            return fieldPart + '__c';
+            return properCaseMap.get((fieldPart + '__c').toLowerCase());
         }
 
-        System.debug(LoggingLevel.FINE, 'DocGen: Could not normalize report column: ' + columnKey);
+        System.debug(LoggingLevel.FINE, 'DocGen: Could not normalize report column: ' + columnKey + ' (label: ' + columnLabel + ')');
         return null;
     }
 
