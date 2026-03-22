@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.6.0
+- **Multi-Object Query Builder** — Tab-per-object layout with visual relationship tree. Build templates spanning Account → Opportunities → Line Items → Contacts in one view. Each object gets its own tab with field selection, parent field picker, and WHERE/ORDER BY/LIMIT.
+- **V3 Query Tree Engine** — New JSON v3 config format. One SOQL query per object node, stitched together in Apex. Supports any depth with zero SOQL nesting limits. Backward compatible with v1/v2 configs.
+- **Report Import** — Import field selections from existing Salesforce Reports. Auto-detects base object, parent lookups, child relationships, and junction objects. Standard date filters extracted as bulk WHERE clauses.
+- **Junction Object Support** — Contact via OpportunityContactRole, Campaign Members, and other junction objects detected and handled automatically. Two-hop queries stitch junction targets into the data map.
+- **E2E Test Script** — `scripts/e2e-test.apex` validates the full pipeline: data creation, V3 tree walker, parent fields, grandchild stitching, legacy backward compat, and document generation. 9 tests, one click.
+- **Amanda-Friendly Naming** — All labels use plain English: "Opportunity Products" not "OpportunityLineItems", "Your Document Structure" not "Relationship Map", "Include parent fields" not "Add parent above".
+
 ## v1.5.0
 - **Command Hub** — Single-tab UX replacing 7 tabs. Wizard-first onboarding, embedded bulk generator, contextual help.
 - **Deep Grandchild Relationships** — Multi-level query stitching: Account → Opportunities → Line Items → Schedules. One SOQL per level, stitched in Apex. Query builder UI supports "Add Related List" inside child cards.

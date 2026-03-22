@@ -2,7 +2,7 @@
 
 Turn any Word template into a merged PDF or DOCX, straight from your Salesforce records.
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Buy Amanda a Coffee](https://img.shields.io/badge/Buy_Amanda_a_Coffee-%E2%98%95-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/davemoudya)
@@ -11,13 +11,13 @@ Turn any Word template into a merged PDF or DOCX, straight from your Salesforce 
 
 ## Install (2 minutes)
 
-**Package Version ID**: `04tdL000000RhvJQAS`
+**Package Version ID**: `04tdL000000RnHZQA0`
 
 ```bash
-sf package install --package 04tdL000000RhvJQAS --wait 10 --installation-key-bypass
+sf package install --package 04tdL000000RnHZQA0 --wait 10 --installation-key-bypass
 ```
 
-Or click: [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RhvJQAS) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RhvJQAS)
+Or click: [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RnHZQA0) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RnHZQA0)
 
 **After install:**
 1. Assign the **DocGen Admin** permission set to yourself (Setup > Permission Sets)
