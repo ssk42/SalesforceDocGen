@@ -43,8 +43,14 @@ public with sharing class DocGenDataRetriever {
             throw new AuraHandledException('Invalid parameters for data retrieval.');
         }
 
-        // JSON v2 config: starts with '{', contains version field
+        // JSON config: route by version
         if (fieldsConfig.trim().startsWith('{')) {
+            Map<String, Object> jsonConfig = (Map<String, Object>) JSON.deserializeUntyped(fieldsConfig.trim());
+            Object versionObj = jsonConfig.get('v');
+            Integer version = (versionObj != null) ? Integer.valueOf(String.valueOf(versionObj)) : 2;
+            if (version >= 3) {
+                return getRecordDataV3(recordId, jsonConfig);
+            }
             return getRecordDataV2(recordId, baseObject, fieldsConfig);
         }
 
@@ -265,6 +271,260 @@ public with sharing class DocGenDataRetriever {
             if (targetData != null) {
                 jRec.put(js.targetObject, targetData);
             }
+        }
+    }
+
+    // =========================================================================
+    // V3: Query Tree Walker — multiple related objects, any depth
+    // =========================================================================
+
+    /**
+     * Inner class representing a node in the query tree.
+     */
+    private class TreeNode {
+        String id;
+        String objectApiName;
+        List<String> fields;
+        List<String> parentFields;
+        String parentNodeId;
+        String lookupField;
+        String relationshipName;
+        String whereClause;
+        String orderByClause;
+        String limitClause;
+        // Junction support
+        Map<String, Object> junction;
+    }
+
+    /**
+     * Processes a JSON v3 query tree config. Walks the tree top-down,
+     * executing one SOQL query per node and stitching results into the
+     * parent's data map.
+     */
+    private static Map<String, Object> getRecordDataV3(Id recordId, Map<String, Object> config) {
+        // Parse all nodes
+        List<TreeNode> allNodes = new List<TreeNode>();
+        Map<String, TreeNode> nodeMap = new Map<String, TreeNode>();
+
+        List<Object> nodesJson = (List<Object>) config.get('nodes');
+        if (nodesJson == null || nodesJson.isEmpty()) {
+            throw new AuraHandledException('No query nodes defined.');
+        }
+
+        for (Object nodeObj : nodesJson) {
+            Map<String, Object> n = (Map<String, Object>) nodeObj;
+            TreeNode tn = new TreeNode();
+            tn.id = (String) n.get('id');
+            tn.objectApiName = (String) n.get('object');
+            tn.parentNodeId = (String) n.get('parentNode');
+            tn.lookupField = (String) n.get('lookupField');
+            tn.relationshipName = (String) n.get('relationshipName');
+            tn.whereClause = (String) n.get('where');
+            tn.orderByClause = (String) n.get('orderBy');
+            tn.limitClause = (String) n.get('limit');
+            tn.junction = (Map<String, Object>) n.get('junction');
+
+            tn.fields = new List<String>();
+            List<Object> flds = (List<Object>) n.get('fields');
+            if (flds != null) for (Object f : flds) tn.fields.add(String.valueOf(f));
+
+            tn.parentFields = new List<String>();
+            List<Object> pFlds = (List<Object>) n.get('parentFields');
+            if (pFlds != null) for (Object f : pFlds) tn.parentFields.add(String.valueOf(f));
+
+            allNodes.add(tn);
+            nodeMap.put(tn.id, tn);
+        }
+
+        // Find root node (parentNode is null)
+        TreeNode root = null;
+        for (TreeNode tn : allNodes) {
+            if (tn.parentNodeId == null) { root = tn; break; }
+        }
+        if (root == null) {
+            throw new AuraHandledException('No root node found in query tree.');
+        }
+
+        // Query root: SELECT fields, parentFields FROM object WHERE Id = :recordId
+        List<String> rootSelect = new List<String>();
+        rootSelect.addAll(root.fields);
+        rootSelect.addAll(root.parentFields);
+        if (rootSelect.isEmpty()) rootSelect.add('Id');
+
+        String rootQuery = 'SELECT ' + String.join(rootSelect, ', ') +
+            ' FROM ' + String.escapeSingleQuotes(root.objectApiName) +
+            ' WHERE Id = :recordId LIMIT 1';
+
+        Map<String, Object> rootData;
+        try {
+            List<SObject> results = Database.query(rootQuery, AccessLevel.USER_MODE);
+            if (results.isEmpty()) return null;
+            rootData = mapSObject(results[0]);
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'DocGen: V3 root query error: ' + e.getMessage());
+            throw new AuraHandledException('Error querying root record: ' + e.getMessage());
+        }
+
+        // Walk the tree: process children of each node
+        processChildNodes(root.id, rootData, allNodes, nodeMap, true);
+
+        return rootData;
+    }
+
+    /**
+     * Recursively processes child nodes, querying and stitching results.
+     * @param parentId The tree node ID of the parent
+     * @param parentDataMap The parent's data map (single record) or null for batch
+     * @param allNodes All tree nodes
+     * @param nodeMap Map of node ID → TreeNode
+     * @param isSingleParent True if parent is a single record (root), false if batch
+     */
+    private static void processChildNodes(String parentId, Map<String, Object> parentDataMap,
+            List<TreeNode> allNodes, Map<String, TreeNode> nodeMap, Boolean isSingleParent) {
+
+        // Find children of this parent
+        List<TreeNode> children = new List<TreeNode>();
+        for (TreeNode tn : allNodes) {
+            if (tn.parentNodeId == parentId) children.add(tn);
+        }
+
+        for (TreeNode child : children) {
+            if (String.isBlank(child.lookupField) || String.isBlank(child.relationshipName)) continue;
+
+            // Collect parent record IDs
+            Set<Id> parentIds = new Set<Id>();
+            if (isSingleParent) {
+                Object idVal = parentDataMap.get('Id');
+                if (idVal != null) {
+                    try { parentIds.add(Id.valueOf(String.valueOf(idVal))); } catch (Exception e) { /* skip */ }
+                }
+            }
+            if (parentIds.isEmpty()) continue;
+
+            // Build child query
+            List<String> selectFields = new List<String>();
+            if (!child.fields.contains('Id')) selectFields.add('Id');
+            selectFields.addAll(child.fields);
+            selectFields.addAll(child.parentFields);
+            selectFields.add(child.lookupField);
+
+            // Junction fields
+            if (child.junction != null) {
+                String targetIdField = (String) child.junction.get('targetIdField');
+                if (String.isNotBlank(targetIdField) && !selectFields.contains(targetIdField)) {
+                    selectFields.add(targetIdField);
+                }
+                List<Object> jFields = (List<Object>) child.junction.get('junctionFields');
+                if (jFields != null) {
+                    for (Object jf : jFields) {
+                        String jfs = String.valueOf(jf);
+                        if (!selectFields.contains(jfs)) selectFields.add(jfs);
+                    }
+                }
+            }
+
+            String childQuery = 'SELECT ' + String.join(selectFields, ', ') +
+                ' FROM ' + String.escapeSingleQuotes(child.objectApiName) +
+                ' WHERE ' + String.escapeSingleQuotes(child.lookupField) + ' IN :parentIds';
+            if (String.isNotBlank(child.whereClause)) childQuery += ' AND ' + child.whereClause;
+            if (String.isNotBlank(child.orderByClause)) childQuery += ' ORDER BY ' + child.orderByClause;
+            if (String.isNotBlank(child.limitClause)) childQuery += ' LIMIT ' + child.limitClause;
+
+            List<SObject> childResults;
+            try {
+                childResults = Database.query(childQuery, AccessLevel.USER_MODE);
+            } catch (Exception e) {
+                System.debug(LoggingLevel.WARN, 'DocGen: V3 child query error for ' + child.objectApiName + ': ' + e.getMessage());
+                continue;
+            }
+
+            // Group by parent lookup field
+            Map<Id, List<Map<String, Object>>> grouped = new Map<Id, List<Map<String, Object>>>();
+            for (SObject rec : childResults) {
+                Id parentRecId = (Id) rec.get(child.lookupField);
+                if (!grouped.containsKey(parentRecId)) {
+                    grouped.put(parentRecId, new List<Map<String, Object>>());
+                }
+                grouped.get(parentRecId).add(mapSObject(rec));
+            }
+
+            // Stitch into parent
+            Object parentIdVal = parentDataMap.get('Id');
+            if (parentIdVal != null) {
+                Id parentRecId;
+                try { parentRecId = Id.valueOf(String.valueOf(parentIdVal)); } catch (Exception e) { continue; }
+
+                List<Map<String, Object>> childRecords = grouped.containsKey(parentRecId)
+                    ? grouped.get(parentRecId) : new List<Map<String, Object>>();
+
+                parentDataMap.put(child.relationshipName, new Map<String, Object>{
+                    'totalSize' => childRecords.size(),
+                    'records' => childRecords
+                });
+
+                // Junction stitching: if this node has a junction config, stitch target data
+                if (child.junction != null) {
+                    stitchJunctionForTree(childRecords, child.junction);
+                }
+
+                // Recurse: process this child's children for each child record
+                for (Map<String, Object> childRec : childRecords) {
+                    processChildNodes(child.id, childRec, allNodes, nodeMap, true);
+                }
+            }
+        }
+    }
+
+    /**
+     * Stitches junction target data into child records (tree version).
+     * Same concept as stitchJunctionTargets but works with the tree node junction config.
+     */
+    private static void stitchJunctionForTree(List<Map<String, Object>> junctionRecords,
+            Map<String, Object> junctionConfig) {
+        String targetObject = (String) junctionConfig.get('targetObject');
+        String targetIdField = (String) junctionConfig.get('targetIdField');
+        if (String.isBlank(targetObject) || String.isBlank(targetIdField)) return;
+
+        List<String> targetFields = new List<String>();
+        List<Object> tfl = (List<Object>) junctionConfig.get('targetFields');
+        if (tfl != null) for (Object f : tfl) targetFields.add(String.valueOf(f));
+        if (targetFields.isEmpty()) return;
+        if (!targetFields.contains('Id')) targetFields.add(0, 'Id');
+
+        // Collect target IDs
+        Set<Id> targetIds = new Set<Id>();
+        for (Map<String, Object> rec : junctionRecords) {
+            Object idVal = rec.get(targetIdField);
+            if (idVal != null) {
+                try { targetIds.add(Id.valueOf(String.valueOf(idVal))); } catch (Exception e) { /* skip */ }
+            }
+        }
+        if (targetIds.isEmpty()) return;
+
+        // Query targets
+        String tQuery = 'SELECT ' + String.join(targetFields, ', ') +
+            ' FROM ' + String.escapeSingleQuotes(targetObject) +
+            ' WHERE Id IN :targetIds';
+
+        Map<Id, Map<String, Object>> targetMap = new Map<Id, Map<String, Object>>();
+        try {
+            for (SObject rec : Database.query(tQuery, AccessLevel.USER_MODE)) {
+                targetMap.put(rec.Id, mapSObject(rec));
+            }
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: V3 junction target query error: ' + e.getMessage());
+            return;
+        }
+
+        // Stitch
+        for (Map<String, Object> jRec : junctionRecords) {
+            Object idVal = jRec.get(targetIdField);
+            if (idVal == null) continue;
+            try {
+                Id tId = Id.valueOf(String.valueOf(idVal));
+                Map<String, Object> tData = targetMap.get(tId);
+                if (tData != null) jRec.put(targetObject, tData);
+            } catch (Exception e) { /* skip */ }
         }
     }
 
