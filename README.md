@@ -19,13 +19,13 @@ sf package install --package 04tdL000000RnavQAC --wait 10 --installation-key-byp
 
 Or click: [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RnavQAC) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RnavQAC)
 
-**Beta (v2.1.0 — PDF Merger)**: `04tdL000000RrBVQA0`
+**Beta (v2.1.0 — PDF Merger)**: `04tdL000000RrRdQAK`
 
 ```bash
-sf package install --package 04tdL000000RrBVQA0 --wait 10 --installation-key-bypass
+sf package install --package 04tdL000000RrRdQAK --wait 10 --installation-key-bypass
 ```
 
-Or click: [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RrBVQA0) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RrBVQA0)
+Or click: [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RrRdQAK) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdL000000RrRdQAK)
 
 **After install:**
 1. Assign the **DocGen Admin** permission set to yourself (Setup > Permission Sets)
