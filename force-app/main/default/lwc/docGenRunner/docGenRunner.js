@@ -18,27 +18,51 @@ export default class DocGenRunner extends LightningElement {
     @track selectedTemplateId;
     @track outputMode = 'download';
     @track templateOutputFormat = 'Document';
+    @track appMode = 'generate';
 
     // PDF Merge state
     @track mergeEnabled = false;
     @track recordPdfOptions = [];
     @track selectedPdfCvIds = [];
+    @track mergeOnlyCvIds = [];
 
     isLoading = false;
     error;
     _templateData = [];
+
+    // --- Mode getters ---
+
+    get modeOptions() {
+        return [
+            { label: 'Generate Document', value: 'generate' },
+            { label: 'Merge PDFs Only', value: 'mergeOnly' }
+        ];
+    }
+
+    get isGenerateMode() {
+        return this.appMode === 'generate';
+    }
+
+    get isMergeOnlyMode() {
+        return this.appMode === 'mergeOnly';
+    }
 
     get outputOptions() {
         const formatLabel = this.templateOutputFormat || 'Document';
         const options = [
             { label: `Download ${formatLabel}`, value: 'download' }
         ];
-        // Save to Record is only available for PDF — client-side DOCX/PPTX
-        // assembly exceeds the Aura 4MB payload limit for save operations
         if (formatLabel === 'PDF') {
             options.push({ label: `Save to Record (${formatLabel})`, value: 'save' });
         }
         return options;
+    }
+
+    get mergeOnlyOutputOptions() {
+        return [
+            { label: 'Download PDF', value: 'download' },
+            { label: 'Save to Record', value: 'save' }
+        ];
     }
 
     /** Show merge option only for PDF output templates */
@@ -55,6 +79,15 @@ export default class DocGenRunner extends LightningElement {
             return 'Generate & Merge (' + (this.selectedPdfCvIds.length + 1) + ' PDFs)';
         }
         return 'Generate Document';
+    }
+
+    get mergeOnlyButtonLabel() {
+        const count = this.mergeOnlyCvIds.length;
+        return count > 0 ? 'Merge ' + count + ' PDFs' : 'Merge PDFs';
+    }
+
+    get isMergeOnlyDisabled() {
+        return this.mergeOnlyCvIds.length < 2 || this.isLoading;
     }
 
     @wire(getTemplatesForObject, { objectApiName: '$objectApiName' })
@@ -99,8 +132,20 @@ export default class DocGenRunner extends LightningElement {
         }
     }
 
+    handleModeChange(event) {
+        this.appMode = event.detail.value;
+        this.error = null;
+        if (this.appMode === 'mergeOnly' && this.recordPdfOptions.length === 0) {
+            this._loadRecordPdfs();
+        }
+    }
+
     handleOutputModeChange(event) {
         this.outputMode = event.detail.value;
+    }
+
+    handleMergeOnlySelection(event) {
+        this.mergeOnlyCvIds = event.detail.value;
     }
 
     handleMergeToggle(event) {
@@ -261,6 +306,60 @@ export default class DocGenRunner extends LightningElement {
         } else {
             this.downloadBase64(mergedBase64, docTitle + '.pdf', 'application/pdf');
             this.showToast('Success', 'Merged PDF downloaded.', 'success');
+        }
+    }
+
+    /**
+     * Merge-only mode — no template generation. Fetches selected PDFs
+     * from the record and merges them client-side in the user's chosen order.
+     */
+    async mergeOnlyDocument() {
+        this.isLoading = true;
+        this.error = null;
+
+        try {
+            const count = this.mergeOnlyCvIds.length;
+            this.showToast('Info', `Merging ${count} PDFs...`, 'info');
+
+            // Fetch each PDF — one Apex call each = fresh 6MB heap
+            const pdfBytesArray = [];
+            for (const cvId of this.mergeOnlyCvIds) {
+                const b64 = await getContentVersionBase64({ contentVersionId: cvId });
+                if (b64) {
+                    pdfBytesArray.push(this._base64ToUint8Array(b64));
+                }
+            }
+
+            if (pdfBytesArray.length < 2) {
+                throw new Error('Need at least 2 PDFs to merge.');
+            }
+
+            // Merge client-side
+            const mergedBytes = mergePdfs(pdfBytesArray);
+            const mergedBase64 = this._uint8ArrayToBase64(mergedBytes);
+            const saveToRecord = this.outputMode === 'save';
+
+            if (saveToRecord) {
+                this.showToast('Info', 'Saving merged PDF to record...', 'info');
+                await saveGeneratedDocument({
+                    recordId: this.recordId,
+                    fileName: 'Merged Document',
+                    base64Data: mergedBase64,
+                    extension: 'pdf'
+                });
+                this.showToast('Success', 'Merged PDF saved to record.', 'success');
+            } else {
+                this.downloadBase64(mergedBase64, 'Merged Document.pdf', 'application/pdf');
+                this.showToast('Success', 'Merged PDF downloaded.', 'success');
+            }
+        } catch (e) {
+            let msg = 'Unknown error during merge';
+            if (e.body && e.body.message) msg = e.body.message;
+            else if (e.message) msg = e.message;
+            else if (typeof e === 'string') msg = e;
+            this.error = 'Merge Error: ' + msg;
+        } finally {
+            this.isLoading = false;
         }
     }
 

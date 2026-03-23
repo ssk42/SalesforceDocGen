@@ -13,70 +13,126 @@
             </template>
 
             <template lwc:else>
-                <lightning-combobox
-                    name="template"
-                    label="Select Template"
-                    value={selectedTemplateId}
-                    placeholder="Choose a template..."
-                    options={templateOptions}
-                    onchange={handleTemplateChange}
-                    class="slds-var-m-bottom_medium">
-                </lightning-combobox>
-
+                <!-- Mode toggle: Generate vs Merge Only -->
                 <div class="slds-var-m-bottom_medium">
                     <lightning-radio-group
-                        name="outputMode"
-                        label="Action"
-                        options={outputOptions}
-                        value={outputMode}
-                        onchange={handleOutputModeChange}
+                        name="appMode"
+                        label="Mode"
+                        options={modeOptions}
+                        value={appMode}
+                        onchange={handleModeChange}
                         type="button">
                     </lightning-radio-group>
                 </div>
 
-                <!-- PDF Merge Toggle — only visible for PDF templates -->
-                <template lwc:if={showMergeOption}>
+                <!-- GENERATE MODE -->
+                <template lwc:if={isGenerateMode}>
+                    <lightning-combobox
+                        name="template"
+                        label="Select Template"
+                        value={selectedTemplateId}
+                        placeholder="Choose a template..."
+                        options={templateOptions}
+                        onchange={handleTemplateChange}
+                        class="slds-var-m-bottom_medium">
+                    </lightning-combobox>
+
                     <div class="slds-var-m-bottom_medium">
-                        <lightning-input
-                            type="checkbox"
-                            label="Merge with existing PDFs on this record"
-                            checked={mergeEnabled}
-                            onchange={handleMergeToggle}>
-                        </lightning-input>
+                        <lightning-radio-group
+                            name="outputMode"
+                            label="Action"
+                            options={outputOptions}
+                            value={outputMode}
+                            onchange={handleOutputModeChange}
+                            type="button">
+                        </lightning-radio-group>
                     </div>
 
-                    <!-- PDF file picker — shown when merge is enabled -->
-                    <template lwc:if={mergeEnabled}>
-                        <div class="slds-var-m-bottom_medium slds-box slds-theme_shade slds-var-p-around_small">
-                            <template lwc:if={hasRecordPdfs}>
-                                <p class="slds-text-body_small slds-var-m-bottom_x-small">
-                                    Select PDFs to append after the generated document:
-                                </p>
-                                <lightning-checkbox-group
-                                    name="pdfSelection"
-                                    label="Available PDFs"
-                                    options={recordPdfOptions}
-                                    value={selectedPdfCvIds}
-                                    onchange={handlePdfSelection}
-                                    variant="label-hidden">
-                                </lightning-checkbox-group>
-                            </template>
-                            <template lwc:else>
-                                <p class="slds-text-body_small slds-text-color_weak">
-                                    No PDF files found on this record.
-                                </p>
-                            </template>
+                    <!-- PDF Merge Toggle — only visible for PDF templates -->
+                    <template lwc:if={showMergeOption}>
+                        <div class="slds-var-m-bottom_medium">
+                            <lightning-input
+                                type="checkbox"
+                                label="Merge with existing PDFs on this record"
+                                checked={mergeEnabled}
+                                onchange={handleMergeToggle}>
+                            </lightning-input>
                         </div>
+
+                        <template lwc:if={mergeEnabled}>
+                            <div class="slds-var-m-bottom_medium slds-box slds-theme_shade slds-var-p-around_small">
+                                <template lwc:if={hasRecordPdfs}>
+                                    <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                        Select PDFs to append after the generated document:
+                                    </p>
+                                    <lightning-checkbox-group
+                                        name="pdfSelection"
+                                        label="Available PDFs"
+                                        options={recordPdfOptions}
+                                        value={selectedPdfCvIds}
+                                        onchange={handlePdfSelection}
+                                        variant="label-hidden">
+                                    </lightning-checkbox-group>
+                                </template>
+                                <template lwc:else>
+                                    <p class="slds-text-body_small slds-text-color_weak">
+                                        No PDF files found on this record.
+                                    </p>
+                                </template>
+                            </div>
+                        </template>
                     </template>
+
+                    <lightning-button
+                        variant="brand"
+                        label={generateButtonLabel}
+                        onclick={generateDocument}
+                        disabled={isGenerateDisabled}
+                        class="slds-var-m-top_medium">
+                    </lightning-button>
                 </template>
 
-                <lightning-button
-                    variant="brand"
-                    label={generateButtonLabel}
-                    onclick={generateDocument}
-                    disabled={isGenerateDisabled}
-                    class="slds-var-m-top_medium">
-                </lightning-button>
+                <!-- MERGE ONLY MODE -->
+                <template lwc:if={isMergeOnlyMode}>
+                    <div class="slds-var-m-bottom_medium slds-box slds-theme_shade slds-var-p-around_small">
+                        <template lwc:if={hasRecordPdfs}>
+                            <lightning-dual-listbox
+                                name="mergeOnlySelection"
+                                label="Select and order PDFs to merge"
+                                source-label="Available"
+                                selected-label="Merge Order"
+                                options={recordPdfOptions}
+                                value={mergeOnlyCvIds}
+                                onchange={handleMergeOnlySelection}>
+                            </lightning-dual-listbox>
+                        </template>
+                        <template lwc:else>
+                            <p class="slds-text-body_small slds-text-color_weak">
+                                No PDF files found on this record.
+                            </p>
+                        </template>
+                    </div>
+
+                    <div class="slds-var-m-bottom_medium">
+                        <lightning-radio-group
+                            name="mergeOnlyOutput"
+                            label="Action"
+                            options={mergeOnlyOutputOptions}
+                            value={outputMode}
+                            onchange={handleOutputModeChange}
+                            type="button">
+                        </lightning-radio-group>
+                    </div>
+
+                    <lightning-button
+                        variant="brand"
+                        label={mergeOnlyButtonLabel}
+                        onclick={mergeOnlyDocument}
+                        disabled={isMergeOnlyDisabled}
+                        class="slds-var-m-top_medium">
+                    </lightning-button>
+                </template>
+
             </template>
 
         </div>
