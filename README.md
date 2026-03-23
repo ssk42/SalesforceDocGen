@@ -85,6 +85,39 @@ QR codes support up to **255 characters** — enough for a full Salesforce text 
 
 Store a ContentVersion ID (starts with `068`) in a text field. Works in Word templates — PDF and DOCX output.
 
+### Page Breaks in Loops
+
+Child loops repeat whatever content is between the opening and closing tags — **including page breaks**. This means you can put each child record on its own page just by adding a page break inside the loop.
+
+**Example: One receipt per Opportunity**
+
+Say you have an Account with multiple Opportunities and you want each Opportunity printed as a separate receipt page. In your Word template:
+
+```
+{#Opportunities}
+                    RECEIPT
+Customer:   {Account.Name}
+Date:       {CloseDate:MM/dd/yyyy}
+Amount:     {Amount:currency}
+Rep:        {Owner.Name}
+
+Thank you for your business!
+                                        ← page break here
+{/Opportunities}
+```
+
+Insert the page break in Word (Insert → Page Break, or Ctrl+Enter) right before the closing `{/Opportunities}` tag. Each Opportunity gets its own full page.
+
+**How to set it up:**
+1. Open your `.docx` template in Word
+2. Place your opening loop tag (`{#Opportunities}`) at the top
+3. Design one page of content using merge tags
+4. At the bottom, insert a **Page Break** (Insert → Page Break)
+5. Place the closing tag (`{/Opportunities}`) right after the page break
+6. Upload the template — each child record gets its own page
+
+This works with any child loop — Contacts, Line Items, Cases, custom objects. Anything you can loop over, you can page-break over. Combine it with images, barcodes, QR codes, and formatting tags to build invoices, packing slips, certificates, or anything that needs one page per record.
+
 ---
 
 ## Template Formats
