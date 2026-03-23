@@ -47,6 +47,27 @@ function concat(arrays) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Extracts a full dictionary (<< ... >>) from the string starting at or after pos.
+ * Handles nested << >> correctly so we don't stop at an inner >>.
+ */
+function extractDict(str, pos) {
+    const start = str.indexOf('<<', pos);
+    if (start === -1) return '';
+    let depth = 0;
+    let i = start;
+    while (i < str.length - 1) {
+        if (str[i] === '<' && str[i + 1] === '<') { depth++; i += 2; }
+        else if (str[i] === '>' && str[i + 1] === '>') {
+            depth--;
+            if (depth === 0) return str.substring(start, i + 2);
+            i += 2;
+        }
+        else { i++; }
+    }
+    return str.substring(start); // unterminated — return what we have
+}
+
+/**
  * Replaces all indirect references (N 0 R) in dictionary text.
  * Only call on dictionary text, never on stream binary data.
  */
@@ -124,29 +145,65 @@ function parsePdf(bytes) {
     }
 
     // --- Find root catalog ---
+    // Follow the spec: startxref → xref location → trailer/root
     let rootNum = null;
 
-    // Traditional trailer
-    const tidx = str.lastIndexOf('trailer');
-    if (tidx !== -1) {
-        const tend = str.indexOf('>>', tidx);
-        if (tend !== -1) {
-            const trailer = str.substring(tidx, tend + 2);
-            if (trailer.includes('/Encrypt')) {
+    // Primary: use startxref to find xref, then extract /Root
+    const startxrefIdx = str.lastIndexOf('startxref');
+    if (startxrefIdx !== -1) {
+        const xrefOffsetMatch = str.substring(startxrefIdx + 9).match(/\s*(\d+)/);
+        if (xrefOffsetMatch) {
+            const xrefOffset = parseInt(xrefOffsetMatch[1]);
+            const atOffset = str.substring(xrefOffset, xrefOffset + 10).trimStart();
+
+            if (atOffset.startsWith('xref')) {
+                // Traditional xref table — trailer dict follows
+                const trailerIdx = str.indexOf('trailer', xrefOffset);
+                if (trailerIdx !== -1) {
+                    // Extract full trailer dict (handle nested << >>)
+                    const trailerDict = extractDict(str, trailerIdx);
+                    if (trailerDict.includes('/Encrypt')) {
+                        throw new Error('Encrypted PDFs cannot be merged');
+                    }
+                    const rm = trailerDict.match(/\/Root\s+(\d+)\s+0\s+R/);
+                    if (rm) rootNum = parseInt(rm[1]);
+                }
+            } else {
+                // Cross-reference stream (PDF 1.5+) — the object dict IS the trailer
+                const objMatch = str.substring(xrefOffset).match(/(\d+)\s+0\s+obj/);
+                if (objMatch) {
+                    const dictStart = xrefOffset + objMatch.index + objMatch[0].length;
+                    const streamIdx = str.indexOf('stream', dictStart);
+                    const endIdx = str.indexOf('endobj', dictStart);
+                    const dictEnd = (streamIdx !== -1 && streamIdx < endIdx) ? streamIdx : endIdx;
+                    const dictText = str.substring(dictStart, dictEnd);
+                    if (dictText.includes('/Encrypt')) {
+                        throw new Error('Encrypted PDFs cannot be merged');
+                    }
+                    const rm = dictText.match(/\/Root\s+(\d+)\s+0\s+R/);
+                    if (rm) rootNum = parseInt(rm[1]);
+                }
+            }
+        }
+    }
+
+    // Fallback: scan for traditional trailer keyword anywhere
+    if (rootNum === null) {
+        const tidx = str.lastIndexOf('trailer');
+        if (tidx !== -1) {
+            const trailerDict = extractDict(str, tidx);
+            if (trailerDict.includes('/Encrypt')) {
                 throw new Error('Encrypted PDFs cannot be merged');
             }
-            const rm = trailer.match(/\/Root\s+(\d+)\s+0\s+R/);
+            const rm = trailerDict.match(/\/Root\s+(\d+)\s+0\s+R/);
             if (rm) rootNum = parseInt(rm[1]);
         }
     }
 
-    // Fallback: xref stream (PDF 1.5+) — /Root is in the stream object's dict
+    // Fallback: scan all objects for xref stream with /Root
     if (rootNum === null) {
         for (const [, obj] of objects) {
-            if (obj.dictText.includes('/XRef') && obj.dictText.includes('/Root')) {
-                if (obj.dictText.includes('/Encrypt')) {
-                    throw new Error('Encrypted PDFs cannot be merged');
-                }
+            if (obj.dictText.includes('/Root')) {
                 const rm = obj.dictText.match(/\/Root\s+(\d+)\s+0\s+R/);
                 if (rm) {
                     rootNum = parseInt(rm[1]);
@@ -288,7 +345,11 @@ export function mergePdfs(pdfBytesArray) {
                 isPage
             });
 
-            if (isPage) allPages.push(newNum);
+        }
+
+        // Collect pages in tree order (not object scan order)
+        for (const pageNum of pdf.pageNums) {
+            allPages.push(numMap.get(pageNum));
         }
     }
 
