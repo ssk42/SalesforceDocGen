@@ -19,6 +19,11 @@
                 <default>false</default>
                 <label>PowerPoint</label>
             </value>
+            <value>
+                <fullName>Excel</fullName>
+                <default>false</default>
+                <label>Excel</label>
+            </value>
         </valueSetDefinition>
     </valueSet>
 </CustomField>

@@ -86,10 +86,16 @@ public with sharing class DocGenService {
         mr.outputFormat = outputFormat;
 
         // Determine rels path based on template type
-        mr.relsPath = (templateType == 'PowerPoint')
-            ? 'ppt/_rels/presentation.xml.rels'
-            : 'word/_rels/document.xml.rels';
-        mr.mediaPath = (templateType == 'PowerPoint') ? 'ppt/media/' : 'word/media/';
+        if (templateType == 'PowerPoint') {
+            mr.relsPath = 'ppt/_rels/presentation.xml.rels';
+            mr.mediaPath = 'ppt/media/';
+        } else if (templateType == 'Excel') {
+            mr.relsPath = 'xl/_rels/workbook.xml.rels';
+            mr.mediaPath = 'xl/media/';
+        } else {
+            mr.relsPath = 'word/_rels/document.xml.rels';
+            mr.mediaPath = 'word/media/';
+        }
 
         // For PDF output, try the heap-efficient path: use pre-decomposed XML parts
         // saved as ContentVersions during template version save, skipping full ZIP decompression.
@@ -105,9 +111,13 @@ public with sharing class DocGenService {
             }
         }
 
-        // Full ZIP decompression path — used for DOCX/PPTX output or when pre-decomposed parts are unavailable
+        // Full ZIP decompression path — used for DOCX/PPTX/XLSX output or when pre-decomposed parts are unavailable
         Blob templateBlob = EncodingUtil.base64Decode(base64File);
         Compression.ZipReader reader = new Compression.ZipReader(templateBlob);
+
+        // Excel two-pass: worksheets collected here, processed after shared strings are read
+        Map<String, String> pendingExcelSheets = new Map<String, String>();
+        String excelSharedStringsXml = null;
 
         for (Compression.ZipEntry entry : reader.getEntries()) {
             String name = entry.getName();
@@ -118,12 +128,29 @@ public with sharing class DocGenService {
                               (name.startsWith('word/footer') && name.endsWith('.xml'));
             } else if (templateType == 'PowerPoint') {
                 isTargetXml = name.startsWith('ppt/slides/slide') && name.endsWith('.xml');
+            } else if (templateType == 'Excel') {
+                isTargetXml = (name.startsWith('xl/worksheets/sheet') && name.endsWith('.xml')) ||
+                              name == 'xl/sharedStrings.xml';
+            }
+
+            // Excel: collect worksheets for second pass (shared strings must be read first)
+            if (templateType == 'Excel' && isTargetXml && name != 'xl/sharedStrings.xml') {
+                pendingExcelSheets.put(name, reader.extract(name).toString());
+                continue;
             }
 
             if (isTargetXml) {
                 Blob content = reader.extract(name);
                 String xml = content.toString();
                 currentTemplateType = templateType;
+
+                // Excel: capture shared strings table (not merged, just stored)
+                if (templateType == 'Excel' && name == 'xl/sharedStrings.xml') {
+                    excelSharedStringsXml = xml;
+                    mr.passthroughEntries.put(name, content); // keep original in ZIP
+                    continue;
+                }
+
                 if (templateType == 'Word') {
                     xml = mergeRunsInTags(xml);
                 }
@@ -139,6 +166,20 @@ public with sharing class DocGenService {
             } else {
                 mr.passthroughEntries.put(name, reader.extract(name));
             }
+        }
+
+        // Excel second pass: inline shared strings into worksheets, then merge tags
+        if (templateType == 'Excel' && !pendingExcelSheets.isEmpty()) {
+            currentTemplateType = 'Excel';
+            List<String> sharedStrings = parseSharedStrings(excelSharedStringsXml);
+            for (String sheetName : pendingExcelSheets.keySet()) {
+                String xml = pendingExcelSheets.get(sheetName);
+                xml = inlineSharedStrings(xml, sharedStrings);
+                xml = processXml(xml, recordDataMap);
+                mr.processedXmlEntries.put(sheetName, xml);
+            }
+            // Remove sharedStrings.xml from passthrough — cells are now inline
+            mr.passthroughEntries.remove('xl/sharedStrings.xml');
         }
 
         // Collect existing template images into imageBase64ByRelId for HTML rendering.
@@ -1197,6 +1238,124 @@ public with sharing class DocGenService {
     private static final Set<String> AGGREGATE_FUNCTIONS = new Set<String>{
         'SUM', 'COUNT', 'AVG', 'MIN', 'MAX'
     };
+
+    // ---------------------------------------------------------------------------
+    // Excel Shared String Inlining
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Parses xl/sharedStrings.xml and returns an ordered list of string values.
+     * Each <si> element at index N is the string referenced by <v>N</v> in cells.
+     */
+    private static List<String> parseSharedStrings(String xml) {
+        List<String> strings = new List<String>();
+        if (String.isBlank(xml)) return strings;
+
+        Integer cursor = 0;
+        while (cursor < xml.length()) {
+            Integer siStart = xml.indexOf('<si>', cursor);
+            if (siStart == -1) {
+                siStart = xml.indexOf('<si ', cursor);
+            }
+            if (siStart == -1) break;
+
+            Integer siEnd = xml.indexOf('</si>', siStart);
+            if (siEnd == -1) break;
+
+            // Extract all <t> content within this <si>
+            String siContent = xml.substring(siStart, siEnd);
+            String value = '';
+            Integer tCursor = 0;
+            while (tCursor < siContent.length()) {
+                Integer tStart = siContent.indexOf('<t', tCursor);
+                if (tStart == -1) break;
+                Integer tTagEnd = siContent.indexOf('>', tStart);
+                if (tTagEnd == -1) break;
+                // Skip self-closing
+                if (siContent.substring(tTagEnd - 1, tTagEnd) == '/') {
+                    tCursor = tTagEnd + 1;
+                    continue;
+                }
+                Integer tEnd = siContent.indexOf('</t>', tTagEnd);
+                if (tEnd == -1) break;
+                value += siContent.substring(tTagEnd + 1, tEnd);
+                tCursor = tEnd + 4;
+            }
+            strings.add(value);
+            cursor = siEnd + 5;
+        }
+        return strings;
+    }
+
+    /**
+     * Converts cells that reference shared strings (t="s") to inline strings (t="inlineStr").
+     * This allows processXml() to find and resolve merge tags inside cell values.
+     *
+     * Before: <c r="A1" t="s"><v>3</v></c>  (index 3 in shared strings = "{Name}")
+     * After:  <c r="A1" t="inlineStr"><is><t>{Name}</t></is></c>
+     */
+    private static String inlineSharedStrings(String xml, List<String> sharedStrings) {
+        if (sharedStrings.isEmpty()) return xml;
+
+        String result = '';
+        Integer cursor = 0;
+
+        while (cursor < xml.length()) {
+            // Find next cell element
+            Integer cStart = xml.indexOf('<c ', cursor);
+            if (cStart == -1) {
+                result += xml.substring(cursor);
+                break;
+            }
+
+            // Output everything before this cell
+            result += xml.substring(cursor, cStart);
+
+            // Find cell end
+            Integer cEnd = xml.indexOf('</c>', cStart);
+            if (cEnd == -1) {
+                // Self-closing cell
+                Integer selfClose = xml.indexOf('/>', cStart);
+                if (selfClose == -1) {
+                    result += xml.substring(cStart);
+                    break;
+                }
+                result += xml.substring(cStart, selfClose + 2);
+                cursor = selfClose + 2;
+                continue;
+            }
+
+            String cellXml = xml.substring(cStart, cEnd + 4);
+
+            // Check if this is a shared string cell: t="s"
+            if (cellXml.contains('t="s"')) {
+                // Extract the <v> index
+                Integer vStart = cellXml.indexOf('<v>');
+                Integer vEnd = cellXml.indexOf('</v>');
+                if (vStart != -1 && vEnd != -1) {
+                    String indexStr = cellXml.substring(vStart + 3, vEnd).trim();
+                    if (indexStr.isNumeric()) {
+                        Integer idx = Integer.valueOf(indexStr);
+                        if (idx >= 0 && idx < sharedStrings.size()) {
+                            String value = sharedStrings[idx];
+                            // Rebuild cell as inline string
+                            String cellTag = cellXml.substring(0, cellXml.indexOf('>'));
+                            cellTag = cellTag.replace('t="s"', 't="inlineStr"');
+                            result += cellTag + '><is><t>' + value + '</t></is></c>';
+                            cursor = cEnd + 4;
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            // Not a shared string cell — pass through
+            result += cellXml;
+            cursor = cEnd + 4;
+        }
+
+        return result;
+    }
 
     private static Boolean isAggregateTag(String tagContent) {
         Integer colonIdx = tagContent.indexOf(':');

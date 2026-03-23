@@ -225,16 +225,15 @@ export default class DocGenRunner extends LightningElement {
             const selected = this._templateData.find(t => t.Id === this.selectedTemplateId);
             const templateType = selected ? selected.Type__c : 'Word';
             const isPPT = templateType === 'PowerPoint';
-            const isPDF = this.templateOutputFormat === 'PDF' && !isPPT;
+            const isExcel = templateType === 'Excel';
+            const isPDF = this.templateOutputFormat === 'PDF' && !isPPT && !isExcel;
             const saveToRecord = this.outputMode === 'save';
             const shouldMerge = isPDF && this.mergeEnabled && this.selectedPdfCvIds.length > 0;
 
             if (isPDF) {
                 if (shouldMerge) {
-                    // PDF merge path — generate template PDF + fetch selected PDFs + merge client-side
                     await this._generateMergedPdf(saveToRecord);
                 } else {
-                    // Standard PDF path — same backend as bulk generation
                     this.showToast('Info', 'Generating PDF...', 'info');
 
                     const result = await generatePdf({
@@ -251,10 +250,15 @@ export default class DocGenRunner extends LightningElement {
                         this.showToast('Success', 'PDF downloaded.', 'success');
                     }
                 }
+            } else if (isExcel) {
+                // Excel XLSX — client-side assembly (same pattern as DOCX)
+                this.showToast('Info', 'Generating Excel spreadsheet...', 'info');
+                await this._generateOfficeClientSide(saveToRecord, 'xlsx',
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             } else if (!isPPT) {
                 // Word DOCX — client-side assembly for zero heap
                 this.showToast('Info', 'Generating Word document...', 'info');
-                await this._generateDocxClientSide(saveToRecord);
+                await this._generateOfficeClientSide(saveToRecord, 'docx', 'application/octet-stream');
             } else {
                 // PowerPoint — still server-side (different ZIP structure)
                 const result = await processAndReturnDocument({
@@ -481,12 +485,11 @@ export default class DocGenRunner extends LightningElement {
     }
 
     /**
-     * Client-side DOCX assembly. Server merges XML (lightweight), client fetches
-     * the shell ZIP and images by URL, then assembles the final DOCX.
+     * Client-side Office document assembly (DOCX or XLSX).
+     * Server merges XML (lightweight), client fetches images, assembles ZIP.
      * Zero server-side heap for ZIP assembly — enables unlimited document size.
      */
-    async _generateDocxClientSide(saveToRecord) {
-        // 1. Server merges the XML — returns parts, not a ZIP
+    async _generateOfficeClientSide(saveToRecord, extension, mimeType) {
         const parts = await generateDocumentParts({
             templateId: this.selectedTemplateId,
             recordId: this.recordId
@@ -498,10 +501,9 @@ export default class DocGenRunner extends LightningElement {
 
         const docTitle = parts.title || 'Document';
 
-        // 2. Fetch dynamic images one at a time — each Apex call gets fresh heap
+        // Fetch dynamic images one at a time — each Apex call gets fresh heap
         const allImages = { ...(parts.imageBase64Map || {}) };
         if (parts.imageCvIdMap) {
-            // Deduplicate: multiple media paths may reference the same CV ID
             const uniqueCvIds = new Map();
             for (const [mediaPath, cvId] of Object.entries(parts.imageCvIdMap)) {
                 if (!uniqueCvIds.has(cvId)) {
@@ -510,7 +512,6 @@ export default class DocGenRunner extends LightningElement {
                 uniqueCvIds.get(cvId).push(mediaPath);
             }
 
-            // Fetch each unique image in its own Apex call — fresh 6MB heap each time
             for (const [cvId, mediaPaths] of uniqueCvIds) {
                 try {
                     const b64 = await getContentVersionBase64({ contentVersionId: cvId });
@@ -525,23 +526,23 @@ export default class DocGenRunner extends LightningElement {
             }
         }
 
-        // 3. Build the DOCX ZIP from scratch — all XML parts + media as base64
-        const docxBytes = buildDocx(parts.allXmlParts, allImages);
-        const docxBase64 = this._uint8ArrayToBase64(docxBytes);
+        // Build the ZIP from scratch — works for DOCX, XLSX, or any Office Open XML
+        const fileBytes = buildDocx(parts.allXmlParts, allImages);
+        const fileBase64 = this._uint8ArrayToBase64(fileBytes);
+        const label = extension.toUpperCase();
 
-        // 6. Download or save
         if (saveToRecord) {
             this.showToast('Info', 'Saving to Record...', 'info');
             await saveGeneratedDocument({
                 recordId: this.recordId,
                 fileName: docTitle,
-                base64Data: docxBase64,
-                extension: 'docx'
+                base64Data: fileBase64,
+                extension: extension
             });
-            this.showToast('Success', 'DOCX saved to record.', 'success');
+            this.showToast('Success', label + ' saved to record.', 'success');
         } else {
-            this.downloadBase64(docxBase64, docTitle + '.docx', 'application/octet-stream');
-            this.showToast('Success', 'Word document downloaded.', 'success');
+            this.downloadBase64(fileBase64, docTitle + '.' + extension, mimeType);
+            this.showToast('Success', label + ' downloaded.', 'success');
         }
     }
 
