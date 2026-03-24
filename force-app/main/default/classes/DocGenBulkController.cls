@@ -59,6 +59,66 @@ public with sharing class DocGenBulkController {
     }
 
     /**
+     * Estimates the final heap usage for a merged PDF job based on a single sample record.
+     * @param templateId The DocGen template record ID
+     * @param recordCount Total number of records to be processed
+     * @return HeapEstimate object with projected usage and risk status
+     */
+    @AuraEnabled
+    public static HeapEstimate estimateHeapUsage(Id templateId, Integer recordCount) {
+        HeapEstimate estimate = new HeapEstimate();
+        if (templateId == null || recordCount == null || recordCount <= 0) {
+            return estimate;
+        }
+
+        try {
+            DocGen_Template__c temp = [SELECT Test_Record_Id__c FROM DocGen_Template__c WHERE Id = :templateId WITH SYSTEM_MODE LIMIT 1];
+            if (String.isBlank(temp.Test_Record_Id__c)) {
+                estimate.message = 'No test record ID on template. Estimation skipped.';
+                return estimate;
+            }
+
+            // Generate HTML for one record
+            String html = DocGenService.generateHtmlForRecord(templateId, temp.Test_Record_Id__c, null);
+            
+            // Apex characters are 2 bytes. 
+            // Final heap will contain: 
+            // 1. All snippet strings (already in ContentVersion, but read into memory)
+            // 2. Concatenated fullHtml string
+            // 3. pdfBlob (usually ~50-80% of HTML size, but safely assume 100%)
+            // 4. Temporary processing overhead
+            
+            Long singleRecordBytes = html.length() * 2;
+            Long totalProjectedBytes = singleRecordBytes * recordCount;
+            
+            // Add 25% safety buffer for overhead and concatenation
+            Decimal totalMb = (totalProjectedBytes * 1.25) / (1024.0 * 1024.0);
+            
+            estimate.estimatedHeapMb = totalMb.setScale(2);
+            // Async/Queueable heap limit is 12MB. Warn at 8MB, Risk at 10MB+.
+            if (totalMb >= 10.0) {
+                estimate.isRisk = true;
+                estimate.message = 'High risk of Heap Limit failure (' + estimate.estimatedHeapMb + 'MB estimated). Consider reducing the record count or disabling Merge Mode.';
+            } else if (totalMb >= 7.0) {
+                estimate.isRisk = false; // Warning but allowed
+                estimate.message = 'Moderate heap usage estimated (' + estimate.estimatedHeapMb + 'MB). Merge should succeed but monitor job status.';
+            } else {
+                estimate.isRisk = false;
+                estimate.message = 'Heap usage estimated at ' + estimate.estimatedHeapMb + 'MB. Safe to proceed.';
+            }
+        } catch (Exception e) {
+            estimate.message = 'Could not estimate heap: ' + e.getMessage();
+        }
+        return estimate;
+    }
+
+    public class HeapEstimate {
+        @AuraEnabled public Decimal estimatedHeapMb;
+        @AuraEnabled public Boolean isRisk;
+        @AuraEnabled public String message;
+    }
+
+    /**
      * Submits a bulk document generation job for async processing.
      * @param templateId The DocGen template record ID
      * @param condition Optional SOQL WHERE clause to filter records

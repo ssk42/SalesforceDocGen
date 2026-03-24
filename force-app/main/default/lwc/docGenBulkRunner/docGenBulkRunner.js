@@ -11,6 +11,7 @@ import getSavedQueries from '@salesforce/apex/DocGenBulkController.getSavedQueri
 import saveQuery from '@salesforce/apex/DocGenBulkController.saveQuery';
 import deleteQuery from '@salesforce/apex/DocGenBulkController.deleteQuery';
 import getRecentJobs from '@salesforce/apex/DocGenBulkController.getRecentJobs';
+import estimateHeapUsage from '@salesforce/apex/DocGenBulkController.estimateHeapUsage';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 
 const POLL_INTERVAL_MS = 5000;
@@ -79,6 +80,46 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
     @track mergeOnly = false;
     @track jobSearchTerm = '';
 
+    // Heap estimation state
+    @track heapEstimate = null;
+    @track isEstimatingHeap = false;
+
+    get heapMessageClass() {
+        if (!this.heapEstimate) return '';
+        return this.heapEstimate.isRisk ? 'slds-text-color_error slds-text-title_bold' : 'slds-text-color_weak';
+    }
+
+    get isMergeRisk() {
+        return this.mergePdf && this.heapEstimate && this.heapEstimate.isRisk;
+    }
+
+    get heapIconName() {
+        return this.isMergeRisk ? 'utility:warning' : 'utility:info';
+    }
+
+    get heapIconVariant() {
+        return this.isMergeRisk ? 'error' : 'default';
+    }
+
+    async checkHeapUsage() {
+        if (!this.mergePdf || !this.selectedTemplateId || !this.recordCount) {
+            this.heapEstimate = null;
+            return;
+        }
+
+        this.isEstimatingHeap = true;
+        try {
+            this.heapEstimate = await estimateHeapUsage({
+                templateId: this.selectedTemplateId,
+                recordCount: this.recordCount
+            });
+        } catch (error) {
+            console.error('Heap estimation failed', error);
+        } finally {
+            this.isEstimatingHeap = false;
+        }
+    }
+
     get filteredTemplates() {
         const term = (this.templateSearchTerm || '').toLowerCase();
         if (!term) return this.templates;
@@ -113,6 +154,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             this.selectedTemplateName = selected.label;
             this.templateSearchTerm = '';
             this.recordCount = null;
+            this.heapEstimate = null;
             this.loadSavedQueries();
             this.applyAutoFilter();
         }
@@ -201,13 +243,21 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
     handleMergePdfChange(event) {
         this.mergePdf = event.target.checked;
         // If unchecking merge, also uncheck merge-only
-        if (!this.mergePdf) this.mergeOnly = false;
+        if (!this.mergePdf) {
+            this.mergeOnly = false;
+            this.heapEstimate = null;
+        } else {
+            this.checkHeapUsage();
+        }
     }
 
     handleMergeOnlyChange(event) {
         this.mergeOnly = event.target.checked;
         // Merge-only implies merge
-        if (this.mergeOnly) this.mergePdf = true;
+        if (this.mergeOnly) {
+            this.mergePdf = true;
+            this.checkHeapUsage();
+        }
     }
 
     handleJobSearchChange(event) {
@@ -289,6 +339,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
         if (query) {
             this.condition = query.Query_Condition__c;
             this.recordCount = null;
+            this.heapEstimate = null;
         }
     }
 
@@ -349,6 +400,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
     handleConditionChange(event) {
         this.condition = event.detail.value || event.target.value; // Support both
         this.recordCount = null;
+        this.heapEstimate = null;
     }
 
     async handleValidate() {
@@ -358,6 +410,9 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             const count = await validateFilter({ objectName: this.baseObject, condition: this.condition });
             this.recordCount = count;
             this.showToast('Success', `Found ${count} records.`, 'success');
+            if (this.mergePdf) {
+                this.checkHeapUsage();
+            }
         } catch (error) {
             this.showToast('Validation Error', error.body.message, 'error');
             this.recordCount = null;

@@ -1,11 +1,11 @@
 # Changelog
 
-## v2.7.0.3 — "Beacon"
+## v2.7.0.4 — "Beacon"
+- **Proactive Heap Estimator** — The Bulk Runner now automatically estimates the final heap usage before you start a merge job. It simulates a single document generation and projects the total memory requirement, warning you if the job is likely to exceed the 12MB limit.
 - **Word Header/Footer Support for PDF** — Content in Word headers and footers (like company addresses and logos) is now correctly included when generating PDFs.
 - **Fixed Run Data Loss** — Resolved an issue where text or merge tags in a Docx run were lost if the run also contained a line break (`<w:br/>`).
-- **Query Sanitization Graceful Failure** — Invalid WHERE, ORDER BY, or LIMIT clauses in query configurations no longer fail the entire document generation.
-- **Improved Parent Object Detection** — Fixed a bug in `findParentObject` where child objects with self-referential lookups (e.g., `Contact.ReportsToId`) would incorrectly identify themselves as their own parent.
-- **Code Quality Baseline** — Performed a full project scan with Salesforce Code Analyzer. Resolved all **Critical** and **High** severity violations.
+- **Query Sanitization Graceful Failure** — Invalid clauses in query configurations no longer fail the entire generation.
+- **Improved Parent Object Detection** — Fixed self-referential lookup detection.
 
 ## v2.6.0 — "Apollo+"
 - **Bulk Data Pre-Cache** — All record data queried in a single SOQL with an IN clause during batch `start()`, cached as a JSON ContentVersion on the Job record. Each `execute()` reads from cache instead of re-querying. Eliminates 500+ individual SOQL queries for V3 configs. Graceful fallback to per-record queries for V1/V2 or if cache exceeds 4MB.

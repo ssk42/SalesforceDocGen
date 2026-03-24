@@ -253,7 +253,26 @@
                             disabled={isProcessing}>
                         </lightning-input>
                     </div>
-                    <div class="slds-col">
+
+                    <!-- Heap Estimate -->
+                    <template if:true={mergePdf}>
+                        <div class="slds-col slds-size_full slds-var-m-top_small slds-var-p-left_small">
+                            <div class="slds-grid slds-grid_vertical-align-center">
+                                <template if:true={isEstimatingHeap}>
+                                    <lightning-spinner alternative-text="Estimating heap..." size="xx-small" variant="brand" class="slds-is-relative slds-var-m-right_small"></lightning-spinner>
+                                    <span class="slds-text-body_small slds-text-color_weak">Estimating heap usage...</span>
+                                </template>
+                                <template if:false={isEstimatingHeap}>
+                                    <template if:true={heapEstimate}>
+                                        <lightning-icon icon-name={heapIconName} size="xx-small" variant={heapIconVariant} class="slds-var-m-right_xx-small"></lightning-icon>
+                                        <span class={heapMessageClass}>{heapEstimate.message}</span>
+                                    </template>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div class="slds-col slds-var-m-top_small">
                         <lightning-button
                             label="Run Bulk Generation"
                             variant="brand"
