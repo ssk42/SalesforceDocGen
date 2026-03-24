@@ -1,8 +1,8 @@
 {
   "packageDirectories": [
     {
-      "versionName": "Beacon — 2.7.0.6 - Pre-flight Analysis & Report Import Fix",
-      "versionNumber": "2.7.0.6",
+      "versionName": "Beacon — 2.7.0.7 - Header/Footer Images & UI Refresh",
+      "versionNumber": "2.7.0.7",
       "path": "force-app",
       "default": true,
       "package": "Document Generation",

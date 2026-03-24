@@ -600,6 +600,7 @@ public with sharing class DocGenService {
         }
 
         String relsXml = null;
+        List<String> additionalRelsXmls = new List<String>(); // header/footer rels
         Map<String, Blob> mediaEntries = new Map<String, Blob>();
         Map<String, String> xmlEntries = new Map<String, String>();
 
@@ -620,6 +621,10 @@ public with sharing class DocGenService {
 
             if (name == relsPath) {
                 relsXml = entryBlob.toString();
+            } else if (templateType == 'Word' && name.startsWith('word/_rels/') &&
+                       (name.contains('header') || name.contains('footer')) && name.endsWith('.rels')) {
+                // Header/footer relationship files contain image references
+                additionalRelsXmls.add(entryBlob.toString());
             } else if (name.startsWith(mediaPath)) {
                 mediaEntries.put(name, entryBlob);
             }
@@ -665,52 +670,66 @@ public with sharing class DocGenService {
         }
 
         // Save rels XML for image relId mapping during PDF generation
-        if (relsXml != null) {
+        // Combine document rels with header/footer rels so all image relIds are resolvable
+        String combinedRels = relsXml != null ? relsXml : '';
+        for (String hfRels : additionalRelsXmls) {
+            combinedRels += hfRels;
+        }
+        if (String.isNotBlank(combinedRels)) {
             ContentVersion relsCv = new ContentVersion();
             relsCv.Title = xmlPrefix + 'rels';
             relsCv.PathOnClient = xmlPrefix + 'rels.xml';
-            relsCv.VersionData = Blob.valueOf(relsXml);
+            relsCv.VersionData = Blob.valueOf(combinedRels);
             relsCv.FirstPublishLocationId = versionId;
             newCvs.add(relsCv);
         }
 
-        // Parse rels and save each image as a ContentVersion linked to the version record
-        if (relsXml != null && !mediaEntries.isEmpty()) {
+        // Parse rels (document + header/footer) and save each image as a ContentVersion
+        if (!mediaEntries.isEmpty()) {
             String imgPrefix = 'docgen_tmpl_img_' + versionId + '_';
+            Set<String> savedRelIds = new Set<String>();
 
-            Integer relCursor = 0;
-            while (relCursor < relsXml.length()) {
-                Integer relStart = relsXml.indexOf('<Relationship ', relCursor);
-                if (relStart == -1) {
-                    break;
-                }
-                Integer relSelfClose = relsXml.indexOf('/>', relStart);
-                Integer relClose = relsXml.indexOf('>', relStart);
-                if (relClose == -1) {
-                    break;
-                }
-                Integer relEnd = (relSelfClose != -1 && relSelfClose < relClose) ? relSelfClose + 2 : relClose + 1;
+            // Collect all rels XML to parse: main document rels + header/footer rels
+            List<String> allRelsXmls = new List<String>();
+            if (relsXml != null) allRelsXmls.add(relsXml);
+            allRelsXmls.addAll(additionalRelsXmls);
 
-                String relTag = relsXml.substring(relStart, relEnd);
-                String relType = extractXmlAttrValue(relTag, 'Type');
-                if (relType != null && relType.contains('/image')) {
-                    String relId = extractXmlAttrValue(relTag, 'Id');
-                    String target = extractXmlAttrValue(relTag, 'Target');
-                    if (relId != null && target != null && target.startsWith('media/')) {
-                        String fullPath = mediaPath + target.substringAfter('media/');
-                        Blob imgBlob = mediaEntries.get(fullPath);
-                        if (imgBlob != null) {
-                            String ext = target.substringAfterLast('.');
-                            ContentVersion cv = new ContentVersion();
-                            cv.Title = imgPrefix + relId;
-                            cv.PathOnClient = imgPrefix + relId + '.' + ext;
-                            cv.VersionData = imgBlob;
-                            cv.FirstPublishLocationId = versionId;
-                            newCvs.add(cv);
+            for (String currentRels : allRelsXmls) {
+                Integer relCursor = 0;
+                while (relCursor < currentRels.length()) {
+                    Integer relStart = currentRels.indexOf('<Relationship ', relCursor);
+                    if (relStart == -1) {
+                        break;
+                    }
+                    Integer relSelfClose = currentRels.indexOf('/>', relStart);
+                    Integer relClose = currentRels.indexOf('>', relStart);
+                    if (relClose == -1) {
+                        break;
+                    }
+                    Integer relEnd = (relSelfClose != -1 && relSelfClose < relClose) ? relSelfClose + 2 : relClose + 1;
+
+                    String relTag = currentRels.substring(relStart, relEnd);
+                    String relType = extractXmlAttrValue(relTag, 'Type');
+                    if (relType != null && relType.contains('/image')) {
+                        String relId = extractXmlAttrValue(relTag, 'Id');
+                        String target = extractXmlAttrValue(relTag, 'Target');
+                        if (relId != null && target != null && target.startsWith('media/') && !savedRelIds.contains(relId)) {
+                            String fullPath = mediaPath + target.substringAfter('media/');
+                            Blob imgBlob = mediaEntries.get(fullPath);
+                            if (imgBlob != null) {
+                                String ext = target.substringAfterLast('.');
+                                ContentVersion cv = new ContentVersion();
+                                cv.Title = imgPrefix + relId;
+                                cv.PathOnClient = imgPrefix + relId + '.' + ext;
+                                cv.VersionData = imgBlob;
+                                cv.FirstPublishLocationId = versionId;
+                                newCvs.add(cv);
+                                savedRelIds.add(relId);
+                            }
                         }
                     }
+                    relCursor = relEnd;
                 }
-                relCursor = relEnd;
             }
         }
 

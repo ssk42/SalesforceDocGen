@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.7.0.7 — "Beacon"
+- **Header/Footer Images in PDF** — Fixed: images in Word headers and footers now render in PDF output. The template image extraction now parses `word/_rels/header*.xml.rels` and `word/_rels/footer*.xml.rels` in addition to the main document rels. All image relationship IDs are combined so `buildPdfImageMap()` can resolve them. Templates with header/footer images must be re-saved to pick up the fix.
+- **Add Related Records UI Refresh** — Fixed: clicking "Add Related Records" now immediately updates the document structure tree and tabs without requiring navigation away and back.
+- **All 495 Apex tests passing** (100% pass rate). E2E 19/19. Code Analyzer: 0 Critical, 0 High, 0 Medium.
+
 ## v2.7.0.6 — "Beacon"
 - **Pre-flight Job Analysis** — The Bulk Runner now runs a comprehensive governor limit analysis on "Validate Filter". Checks SOQL queries per batch, DML statements, record count limits, and heap usage (merge mode). The Run button is disabled until the filter is validated and all checks pass.
 - **Dynamic Junction Target ID** — Report import now dynamically resolves the lookup field on junction objects (e.g., `ContactId` on `OpportunityContactRole`) instead of hardcoding. Works for any junction relationship, not just Contact.

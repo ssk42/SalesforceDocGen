@@ -522,11 +522,14 @@ export default class DocGenColumnBuilder extends LightningElement {
         const newNode = this._createNode(childObjName, opt.label, false, this.addNodeParentId,
             lookupField, relName);
 
+        this.showAddNodeModal = false;
         this.treeNodes = [...this.treeNodes, newNode];
         this.activeNodeId = newNode.id;
-        this.showAddNodeModal = false;
         this._loadNodeFields(newNode);
         this._notifyChange();
+        // Force a re-render after modal close to ensure tabs and tree update
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => { this.treeNodes = [...this.treeNodes]; }, 0);
     }
 
     _guessLookupField(parentObjectName) {
