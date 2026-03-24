@@ -1,7 +1,7 @@
-@isTest
+@IsTest
 private class DocGenMiscTests {
 
-    @testSetup
+    @TestSetup
     static void setup() {
         Account acc = new Account(Name = 'Misc Test Account', AccountSource = 'Web', Website = 'https://test.com');
         insert acc;
@@ -83,7 +83,7 @@ private class DocGenMiscTests {
     // DocGenSetupController
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGetOrgUrl() {
         Test.startTest();
         String orgUrl = DocGenSetupController.getOrgUrl();
@@ -93,7 +93,7 @@ private class DocGenMiscTests {
         System.assert(orgUrl.length() > 0);
     }
 
-    @isTest
+    @IsTest
     static void testGetSettings() {
         Test.startTest();
         DocGen_Settings__c settings = DocGenSetupController.getSettings();
@@ -102,7 +102,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, settings);
     }
 
-    @isTest
+    @IsTest
     static void testSaveSettings() {
         Test.startTest();
         DocGenSetupController.saveSettings('https://example.my.site.com');
@@ -112,7 +112,7 @@ private class DocGenMiscTests {
         System.assertEquals('https://example.my.site.com', settings.Experience_Site_Url__c);
     }
 
-    @isTest
+    @IsTest
     static void testSaveSettingsUpdatesExisting() {
         DocGenSetupController.saveSettings('https://first.my.site.com');
 
@@ -128,7 +128,7 @@ private class DocGenMiscTests {
     // DocGenDataRetriever
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithValidFields() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
 
@@ -141,7 +141,7 @@ private class DocGenMiscTests {
         System.assertEquals('Web', result.get('AccountSource'));
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithInvalidObject() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         Boolean caught = false;
@@ -157,7 +157,7 @@ private class DocGenMiscTests {
         System.assert(caught, 'Should throw AuraHandledException for invalid object');
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithBlankParams() {
         Boolean caught = false;
 
@@ -172,7 +172,7 @@ private class DocGenMiscTests {
         System.assert(caught, 'Should throw AuraHandledException for blank params');
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithRelationshipField() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
 
@@ -185,7 +185,7 @@ private class DocGenMiscTests {
         System.assert(result.containsKey('Owner'), 'Should contain Owner relationship data');
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithNonExistentField() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
 
@@ -197,7 +197,7 @@ private class DocGenMiscTests {
         System.assertEquals('Misc Test Account', result.get('Name'));
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithBlankObjectOrFields() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         Boolean caught1 = false;
@@ -224,7 +224,7 @@ private class DocGenMiscTests {
     // DocGenFlowAction
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentFlowActionErrorPath() {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -244,7 +244,7 @@ private class DocGenMiscTests {
         System.assertEquals(null, responses[0].contentDocumentId);
     }
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentFlowActionResponseStructure() {
         DocGenFlowAction.Response res = new DocGenFlowAction.Response();
         res.contentDocumentId = null;
@@ -257,7 +257,7 @@ private class DocGenMiscTests {
     // DocGenException
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testDocGenExceptionConstruction() {
         DocGenException ex = new DocGenException('Test error message');
         System.assertEquals('Test error message', ex.getMessage());
@@ -274,7 +274,7 @@ private class DocGenMiscTests {
     // DocGenService — error paths
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentThrowsOnInvalidDocx() {
         createTestFile();
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -292,7 +292,7 @@ private class DocGenMiscTests {
         Test.stopTest();
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentNullTemplate() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
 
@@ -306,7 +306,7 @@ private class DocGenMiscTests {
         Test.stopTest();
     }
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentNullRecord() {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
@@ -325,7 +325,7 @@ private class DocGenMiscTests {
     // mergeRunsInTags, generateDocTitle, saveFile, buildImageXml)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithSimpleTags() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -347,7 +347,7 @@ private class DocGenMiscTests {
         System.assertEquals('Word', result.get('templateType'));
     }
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentWithValidDocx() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -365,7 +365,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, docId, 'Should return ContentDocumentId');
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentMergesRunsInTags() {
         // Simulate Word splitting {Name} across multiple <w:t> elements
         String docXml =
@@ -387,7 +387,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithSectionTag() {
         // Boolean-true section (Account always truthy via Owner)
         String docXml =
@@ -407,7 +407,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithHtmlFieldValue() {
         // Account Website field is plain text, but we test that HTML stripping works
         // by using a field config that includes Website
@@ -431,7 +431,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithTitleFormat() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -454,7 +454,7 @@ private class DocGenMiscTests {
         System.assert(title.contains('Web'), 'Title should contain account source');
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithImageTag() {
         // {%SomeImage} tag — resolveValue returns null so image is skipped, but code path is covered
         String docXml =
@@ -473,7 +473,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithImageSizeTag() {
         // {%SomeImage:200x150} — image with dimensions
         String docXml =
@@ -492,7 +492,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithClosingTagOnly() {
         // Orphaned {/something} tag — should be output as literal
         String docXml =
@@ -511,7 +511,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithUnmatchedSection() {
         // {#section} without closing {/section} — output as literal
         String docXml =
@@ -530,7 +530,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithHeaderAndFooter() {
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry('[Content_Types].xml', Blob.valueOf(
@@ -573,7 +573,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentWithPdfFormat() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -598,7 +598,7 @@ private class DocGenMiscTests {
     // DocGenService — additional coverage for uncovered branches
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithChildSubquery() {
         // Use Contacts subquery to exercise loop processing with records list
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -625,7 +625,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithTableRowLoop() {
         // Section inside a <w:tr> — exercises table row expansion code
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -651,7 +651,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithNestedDotPath() {
         // Owner.Name uses dotted path — exercises resolveValue with nested map
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -673,7 +673,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithBase64ImageField() {
         // Inject a base64 data URI value to exercise buildImageXml data URI path
         // We can't easily inject custom field data, but we can test the image tag with
@@ -710,7 +710,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithHtmlRichText() {
         // Field value contains <p>/<div> HTML that should be stripped
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -734,7 +734,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithPowerPoint() {
         // PowerPoint template — exercises the ppt/slides branch
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -775,7 +775,7 @@ private class DocGenMiscTests {
         System.assertEquals('PowerPoint', result.get('templateType'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentNoTitleFallsBackToName() {
         // No Document_Title_Format__c — falls back to record Name
         String docXml =
@@ -802,7 +802,7 @@ private class DocGenMiscTests {
     // DocGenDataRetriever — additional coverage
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithSubquery() {
         // Exercises the subquery (parenthesized SELECT) branch in field parsing
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -817,7 +817,7 @@ private class DocGenMiscTests {
         System.assert(result.containsKey('Contacts'), 'Should contain Contacts subquery');
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithAutoAppendC() {
         // Exercises the __c auto-append branch — AccountSource exists, but try without __c
         // "Website" is a standard field so this tests the field-not-found skip path
@@ -831,7 +831,7 @@ private class DocGenMiscTests {
         System.assertEquals('Misc Test Account', result.get('Name'));
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithInvalidRelationship() {
         // Exercises the invalid relationship field branch (relFound = false)
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -844,7 +844,7 @@ private class DocGenMiscTests {
         System.assertEquals('Misc Test Account', result.get('Name'));
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataAllFieldsInvalid() {
         // Exercises the cleanSelect == '' fallback to 'Id'
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -857,7 +857,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('Id'));
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithBlankFieldPart() {
         // Exercises the blank field part skip (trailing comma)
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -870,7 +870,7 @@ private class DocGenMiscTests {
         System.assertEquals('Misc Test Account', result.get('Name'));
     }
 
-    @isTest
+    @IsTest
     static void testGetRecordDataWithAddressField() {
         // Exercises the Address type branch in mapSObject
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -897,7 +897,7 @@ private class DocGenMiscTests {
     // DocGenFlowAction — success path coverage
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentFlowActionSuccess() {
         // Create a valid DOCX so the flow action succeeds (covers contentDocumentId assignment)
         String docXml =
@@ -928,7 +928,7 @@ private class DocGenMiscTests {
     // DocGenTemplateManager — additional coverage
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGetTemplateFileContentNullId() {
         Boolean caught = false;
         Test.startTest();
@@ -941,7 +941,7 @@ private class DocGenMiscTests {
         System.assert(caught, 'Should throw for null template ID');
     }
 
-    @isTest
+    @IsTest
     static void testGetTemplateFileContentNoFile() {
         // Template exists but no file attached and no active version
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -960,7 +960,7 @@ private class DocGenMiscTests {
     // DocGenService — generatePdfBlob (unified PDF path)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGeneratePdfBlobWord() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -979,7 +979,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('title'));
     }
 
-    @isTest
+    @IsTest
     static void testGeneratePdfBlobThrowsForPowerPoint() {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
@@ -1020,7 +1020,7 @@ private class DocGenMiscTests {
         System.assert(caught, 'Should throw for PowerPoint PDF generation');
     }
 
-    @isTest
+    @IsTest
     static void testGeneratePdfBlobWithTitleFormat() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -1043,7 +1043,7 @@ private class DocGenMiscTests {
         System.assert(title.contains('Misc Test Account'));
     }
 
-    @isTest
+    @IsTest
     static void testGeneratePdfBlobWithImage() {
         // PDF path with image — exercises imageBase64ByRelId collection
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('PNGFAKE'));
@@ -1072,7 +1072,7 @@ private class DocGenMiscTests {
     // DocGenService — generateDocument save paths
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentSavesPdfWhenOutputFormatPdf() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -1095,7 +1095,7 @@ private class DocGenMiscTests {
         System.assert(savedCv.PathOnClient.endsWith('.pdf'), 'Saved file should be a PDF');
     }
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentSavesPptx() {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
@@ -1141,7 +1141,7 @@ private class DocGenMiscTests {
     // DocGenService — processXml: conditional sections (various data types)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentConditionalSectionTruthyString() {
         // Section where key resolves to a non-null string — exercises the non-null fallback path
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -1165,7 +1165,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentConditionalSectionNullValue() {
         // Section where key resolves to null — produces empty output for section
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -1191,7 +1191,7 @@ private class DocGenMiscTests {
     // DocGenService — processXml: date formatting
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithDateFormatTag() {
         // {CreatedDate:MM/dd/yyyy} — exercises DateTime format path in processXml
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -1213,7 +1213,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithColonInNonDateField() {
         // {Name:someformat} — non-date field with colon, exercises dateFormat != null but not DateTime
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -1237,7 +1237,7 @@ private class DocGenMiscTests {
     // DocGenService — processXml: HTML stripping
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentHtmlSpanAndBrStrip() {
         // Field value with <span> and <br> tags — exercises stripHtmlTags path
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -1265,7 +1265,7 @@ private class DocGenMiscTests {
     // DocGenService — buildImageXml: data URI and rich text <img> paths
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentFieldWithImgTag() {
         // Field value contains <img src="data:image/png;base64,..."> — exercises
         // the rich text image detection and extractImageFromHtml data URI path
@@ -1291,7 +1291,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageTagDataUri() {
         // {%Description} where Description is a data:image/jpeg URI — exercises data URI branch in buildImageXml
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('JPEGFAKE'));
@@ -1316,7 +1316,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageTagBlankValue() {
         // {%Description} where Description is blank — exercises null return from buildImageXml
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -1340,7 +1340,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageTagWithDimensions() {
         // {%Description:200x150} with a data URI — exercises size parsing in image tag
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('SIZED'));
@@ -1369,7 +1369,7 @@ private class DocGenMiscTests {
     // DocGenService — buildImageXml: raw base64 and ContentVersion ID paths
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageTagRawBase64() {
         // {%Description} where Description is a long raw base64 string (no data URI prefix)
         // Exercises the "raw base64" branch (length > 100, no / or space)
@@ -1399,7 +1399,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageTagContentVersionId() {
         // {%Description} where Description holds a ContentVersion ID (starts with 068)
         ContentVersion imgCv = new ContentVersion(
@@ -1435,7 +1435,7 @@ private class DocGenMiscTests {
     // DocGenService — buildImageXml: refid and servlet URL paths (fail gracefully)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageTagRefidUrl() {
         // {%Description} where Description contains a refid URL — exercises fetchSalesforceImage with refid
         // Will fail to find image (no matching record) but exercises the code path
@@ -1461,7 +1461,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageTagServletUrl() {
         // {%Description} with /servlet/ URL — exercises the servlet/sfc branch
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -1489,7 +1489,7 @@ private class DocGenMiscTests {
     // DocGenService — mergeRunsInTags: three-segment split
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testMergeRunsThreeSegments() {
         // Tag split across three <w:t> segments
         String docXml =
@@ -1512,7 +1512,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testMergeRunsNoTagsNoModification() {
         // Document with no merge tags — mergeRunsInTags returns unchanged
         String docXml =
@@ -1535,7 +1535,7 @@ private class DocGenMiscTests {
     // DocGenService — processXml: edge cases
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentUnclosedBrace() {
         // { without matching } — exercises tagClose == -1 path
         String docXml =
@@ -1554,7 +1554,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentEmptyBody() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -1572,7 +1572,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentNullFieldValue() {
         // {NonExistentField} — resolveValue returns null, tag replaced with nothing
         String docXml =
@@ -1591,7 +1591,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentXmlSpecialChars() {
         // Account name with & < > — exercises escapeXml
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -1617,7 +1617,7 @@ private class DocGenMiscTests {
     // DocGenService — resolveValue: case-insensitive and deep nested path
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentCaseInsensitiveField() {
         // {name} lowercase — exercises case-insensitive match
         String docXml =
@@ -1636,7 +1636,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentDeepNestedPathNull() {
         // {Owner.Manager.Name} — deeply nested, Manager is null
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -1662,7 +1662,7 @@ private class DocGenMiscTests {
     // DocGenService — generateDocTitle: mixed present/missing fields
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGenerateDocTitleWithMixedFields() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -1690,7 +1690,7 @@ private class DocGenMiscTests {
     // DocGenService — table row expansion with multiple contacts
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentTableRowExpansionMultipleRows() {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)';
@@ -1722,7 +1722,7 @@ private class DocGenMiscTests {
     // DocGenService — nested sections
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentNestedSections() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'Present';
@@ -1749,7 +1749,7 @@ private class DocGenMiscTests {
     // DocGenService — section outside table rows
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentSectionOutsideTr() {
         // {#Contacts} before TR, {/Contacts} after TR — exercises trClosesBefore path
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
@@ -1778,7 +1778,7 @@ private class DocGenMiscTests {
     // DocGenService — pendingImages: content types already contain png/jpeg
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageWithExistingContentTypes() {
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('IMG'));
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -1832,7 +1832,7 @@ private class DocGenMiscTests {
     // DocGenService — multiple images (two data URIs to exercise pendingImages rels)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentMultipleImageTags() {
         String pngBase64 = EncodingUtil.base64Encode(Blob.valueOf('PNGDATA'));
         String jpgBase64 = EncodingUtil.base64Encode(Blob.valueOf('JPGDATA'));
@@ -1862,7 +1862,7 @@ private class DocGenMiscTests {
     // DocGenService — multiple PPTX slides
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentMultipleSlides() {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
@@ -1911,7 +1911,7 @@ private class DocGenMiscTests {
     // DocGenService — generateDocument with null title fallback in saveFile
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentNullTitleFallback() {
         // Document_Title_Format__c is null → generateDocTitle returns null → falls back to Name
         String docXml =
@@ -1937,7 +1937,7 @@ private class DocGenMiscTests {
     // DocGenService — extractImageFromHtml: various URL patterns in <img> tag
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImgTagWithRefid() {
         // <img> with refid= attribute — exercises extractImageFromHtml refid branch
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -1961,7 +1961,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImgTagWithSfcUrl() {
         // <img> with /sfc/ URL — exercises extractImageFromHtml servlet/sfc branch
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -1989,7 +1989,7 @@ private class DocGenMiscTests {
     // DocGenService — fetchSalesforceImage: ContentDocument ID (069) branch
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageContentDocumentId() {
         // {%Description} where Description holds a ContentDocument ID (069...)
         ContentVersion imgCv = new ContentVersion(
@@ -2025,7 +2025,7 @@ private class DocGenMiscTests {
     // DocGenService — applyResolvedImages
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithResolvedImages() {
         // Exercises the resolvedImages map (line 54-56) — applyResolvedImages with <img> tag
         Account acc = [SELECT Id FROM Account LIMIT 1];
@@ -2058,7 +2058,7 @@ private class DocGenMiscTests {
     // DocGenService — generatePdfBlob used by unified path
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGeneratePdfBlobReturnsValidBlob() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -2082,7 +2082,7 @@ private class DocGenMiscTests {
     // DocGenService — generateDocument PDF save path
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGenerateDocumentPdfSave() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -2107,7 +2107,7 @@ private class DocGenMiscTests {
     // DocGenService — processDocumentAsHtmlWithImageMap
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentAsHtmlWithImageMap() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -2134,7 +2134,7 @@ private class DocGenMiscTests {
     // DocGenService — extractAndSaveTemplateImages
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testExtractAndSaveTemplateImages() {
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry('[Content_Types].xml', Blob.valueOf(
@@ -2187,7 +2187,7 @@ private class DocGenMiscTests {
     // DocGenService — rich text with formatting tags
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentRichTextWithFormattingTags() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p><b>Bold</b> <i>Italic</i> <u>Underline</u></p>';
@@ -2210,7 +2210,7 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'));
     }
 
-    @isTest
+    @IsTest
     static void testProcessDocumentRichTextWithStrongAndEm() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<strong>Strong</strong> and <em>Emphasis</em>';
@@ -2237,7 +2237,7 @@ private class DocGenMiscTests {
     // DocGenService — rich text with inline image (img tag with src URL)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentRichTextImgWithSalesforceUrl() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p>Text <img src="/servlet/rtaImage?eid=001&feoid=00N&refid=0EM000000000001" width="200" height="100" /> more text</p>';
@@ -2264,7 +2264,7 @@ private class DocGenMiscTests {
     // DocGenService — image tag with HTTPS URL (generic external)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentImageTagHttpsUrl() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'https://example.com/some-image.png';
@@ -2291,7 +2291,7 @@ private class DocGenMiscTests {
     // DocGenService — image tag in PowerPoint (skipped)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentPowerPointImageTagSkipped() {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
@@ -2333,7 +2333,7 @@ private class DocGenMiscTests {
     // DocGenService — rich text HTML in PowerPoint (plain text strip)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentPowerPointHtmlStripped() {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
@@ -2374,7 +2374,7 @@ private class DocGenMiscTests {
     // DocGenService — generatePdfBlob download path
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testGeneratePdfBlobDownload() {
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -2397,7 +2397,7 @@ private class DocGenMiscTests {
     // DocGenService — Date format on DateTime field with alternate format
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithDateTimeAlternateFormat() {
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, CreatedDate';
@@ -2422,7 +2422,7 @@ private class DocGenMiscTests {
     // DocGenService — DOCX with existing images (rels parsing)
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testProcessDocumentWithExistingTemplateImage() {
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry('[Content_Types].xml', Blob.valueOf(
@@ -2467,7 +2467,7 @@ private class DocGenMiscTests {
     // DocGenException — thrown and caught
     // =========================================================================
 
-    @isTest
+    @IsTest
     static void testDocGenExceptionThrown() {
         Boolean caught = false;
         Test.startTest();

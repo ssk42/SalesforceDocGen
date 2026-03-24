@@ -18,14 +18,29 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
     // Merge mode: sequence counter for HTML snippet ordering
     public Integer htmlSequence = 0;
 
+    /**
+     * Constructs a batch job in default (non-merge) mode.
+     * @param jobId The DocGen_Job__c record ID
+     */
     public DocGenBatch(Id jobId) {
         this(jobId, false, false);
     }
 
+    /**
+     * Constructs a batch job with optional merge mode.
+     * @param jobId The DocGen_Job__c record ID
+     * @param mergeMode Whether to merge all outputs into a single PDF
+     */
     public DocGenBatch(Id jobId, Boolean mergeMode) {
         this(jobId, mergeMode, false);
     }
 
+    /**
+     * Constructs a batch job with merge mode and merge-only options.
+     * @param jobId The DocGen_Job__c record ID
+     * @param mergeMode Whether to merge all outputs into a single PDF
+     * @param mergeOnly Whether to only generate merged PDF without individual files
+     */
     public DocGenBatch(Id jobId, Boolean mergeMode, Boolean mergeOnly) {
         this.jobId = jobId;
         this.mergeMode = mergeMode || (mergeOnly == true);
@@ -37,6 +52,11 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         this.queryConfig = job.Template__r.Query_Config__c;
     }
 
+    /**
+     * Initializes the batch job: sets status, counts records, builds data cache, and returns query locator.
+     * @param BC The batch context provided by the platform
+     * @return QueryLocator for the records to process
+     */
     public Database.QueryLocator start(Database.BatchableContext BC) {
         // Update Status to Processing
         DocGen_Job__c jobStatus = new DocGen_Job__c(Id = jobId, Status__c = 'Processing');
@@ -77,7 +97,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
     private void buildDataCache(String query, String sanitizedCondition) {
         try {
             Integer configVersion = DocGenDataRetriever.getConfigVersion(queryConfig);
-            if (configVersion < 3) return;
+                        if (configVersion < 3) { return; }
 
             // Collect all record IDs
             String idQuery = 'SELECT Id FROM ' + String.escapeSingleQuotes(baseObject);
@@ -90,7 +110,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             for (SObject rec : Database.query(idQuery)) { // NOPMD ApexSOQLInjection - baseObject validated by Schema.getGlobalDescribe() above; condition sanitized; USER_MODE
                 recordIds.add(rec.Id);
             }
-            if (recordIds.isEmpty()) return;
+                        if (recordIds.isEmpty()) { return; }
 
             // Bulk query all record data in one pass
             Map<String, Object> config = (Map<String, Object>) JSON.deserializeUntyped(queryConfig.trim());
@@ -111,7 +131,6 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
 
             // Heap guard: skip caching if JSON is too large
             if (jsonStr.length() > 4000000) {
-                System.debug(LoggingLevel.WARN, 'DocGen: Data cache JSON too large (' + jsonStr.length() + ' chars), falling back to per-record queries.');
                 return;
             }
 
@@ -132,11 +151,8 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             DocGen_Job__c jobCache = new DocGen_Job__c(Id = jobId, Data_Cache_CV__c = cv.Id);
             update jobCache;
 
-            System.debug('DocGen: Bulk data cache created — ' + recordIds.size() + ' records, ' + jsonStr.length() + ' chars, CV=' + cv.Id);
-
         } catch (Exception e) {
-            // Graceful fallback: log and continue without cache
-            System.debug(LoggingLevel.WARN, 'DocGen: Data cache creation failed, falling back to per-record queries: ' + e.getMessage());
+            // Graceful fallback: continue without cache
             dataCacheCvId = null;
             cachedDataJson = null;
         }
@@ -146,7 +162,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
      * Basic sanitization of dynamic WHERE conditions to prevent SOQL injection.
      */
     private static String sanitizeCondition(String condition) {
-        if (String.isBlank(condition)) return condition;
+                if (String.isBlank(condition)) { return condition; }
         // Reject dangerous characters (statement termination, comments)
         if (condition.contains(';') || condition.contains('--') || condition.contains('/*')) {
             throw new DocGenException('Invalid filter condition.');
@@ -166,6 +182,24 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
     }
 
     /**
+     * Generates an individual document for a record, using cached data if available.
+     * Also captures HTML snippet for merge mode.
+     */
+    private void generateIndividualDocument(Id recordId, Map<String, Object> recordData) {
+        if (recordData != null) {
+            DocGenService.generateDocumentFromData(templateId, recordId, recordData);
+        } else {
+            DocGenService.generateDocument(templateId, recordId);
+        }
+
+        // Merge mode (not merge-only): also capture HTML snippet for merged PDF
+        if (mergeMode && DocGenService.lastRenderedHtml != null) {
+            saveHtmlSnippet(DocGenService.lastRenderedHtml);
+            DocGenService.lastRenderedHtml = null;
+        }
+    }
+
+    /**
      * Writes one HTML snippet as a tiny ContentVersion linked to the Job.
      * No reads — just write. The Queueable assembles them all at the end.
      */
@@ -181,6 +215,11 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         insert cv; // NOPMD ApexCRUDViolation - internal merge snippet
     }
 
+    /**
+     * Processes a batch of records: generates documents and optionally captures HTML snippets for merge.
+     * @param BC The batch context provided by the platform
+     * @param scope The list of records to process in this batch execution
+     */
     public void execute(Database.BatchableContext BC, List<SObject> scope) {
         // Lazy-load cache from ContentVersion if Stateful string was lost
         if (dataCacheCvId != null && cachedDataJson == null) {
@@ -188,7 +227,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
                 ContentVersion cv = [SELECT VersionData FROM ContentVersion WHERE Id = :dataCacheCvId WITH SYSTEM_MODE LIMIT 1];
                 cachedDataJson = cv.VersionData.toString();
             } catch (Exception e) {
-                System.debug(LoggingLevel.WARN, 'DocGen: Could not read data cache CV: ' + e.getMessage());
+                // Intentionally swallowed: cached data CV not found or inaccessible — fall through to fresh query
                 dataCacheCvId = null;
             }
         }
@@ -199,7 +238,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             try {
                 dataCache = (Map<String, Object>) JSON.deserializeUntyped(cachedDataJson);
             } catch (Exception e) {
-                System.debug(LoggingLevel.WARN, 'DocGen: Cache deserialization failed: ' + e.getMessage());
+                // Intentionally swallowed: cached JSON deserialization failed (corrupted or schema mismatch) — fall through to fresh query
                 dataCache = null;
             }
         }
@@ -217,23 +256,12 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
                     saveHtmlSnippet(html);
                 } else {
                     // Normal: generate + save individual PDF per record
-                    if (recordData != null) {
-                        DocGenService.generateDocumentFromData(templateId, rec.Id, recordData);
-                    } else {
-                        DocGenService.generateDocument(templateId, rec.Id);
-                    }
-
-                    // Merge mode (not merge-only): also capture HTML snippet for merged PDF
-                    if (mergeMode && DocGenService.lastRenderedHtml != null) {
-                        saveHtmlSnippet(DocGenService.lastRenderedHtml);
-                        DocGenService.lastRenderedHtml = null;
-                    }
+                    generateIndividualDocument(rec.Id, recordData);
                 }
 
                 successCount++;
             } catch (Exception e) {
                 failCount++;
-                System.debug(LoggingLevel.ERROR, 'DocGen Batch Error for ' + rec.Id + ': ' + e.getMessage());
             }
         }
 
@@ -246,6 +274,10 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         update jobProgress;
     }
 
+    /**
+     * Finalizes the batch job: updates status, chains merge Queueable if needed, sends notification.
+     * @param BC The batch context provided by the platform
+     */
     public void finish(Database.BatchableContext BC) {
         String status;
         if (successCount == 0 && failCount > 0) {
@@ -271,10 +303,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
 
                 // Chain the merge Queueable — it reads all snippets by title prefix
                 System.enqueueJob(new DocGenMergeJob(jobId));
-                System.debug('DocGen: Merge mode — ' + htmlSequence + ' snippets saved, chaining merge job.');
-
             } catch (Exception e) {
-                System.debug(LoggingLevel.ERROR, 'DocGen: Failed to chain merge job: ' + e.getMessage());
                 status = 'Completed with Errors';
                 update new DocGen_Job__c(Id = jobId, Status__c = status, Success_Count__c = successCount, Error_Count__c = failCount);
             }
@@ -299,7 +328,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
                 Id docId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :dataCacheCvId WITH SYSTEM_MODE].ContentDocumentId;
                 delete new ContentDocument(Id = docId);
             } catch (Exception e) {
-                System.debug(LoggingLevel.WARN, 'DocGen: Could not clean up data cache: ' + e.getMessage());
+                // Cleanup failure is non-fatal
             }
         }
     }
@@ -311,7 +340,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
                 WHERE DeveloperName = 'DocGen_Job_Complete'
                 WITH SYSTEM_MODE LIMIT 1
             ];
-            if (types.isEmpty()) return;
+                        if (types.isEmpty()) { return; }
 
             DocGen_Job__c job = [SELECT CreatedById, Label__c, Name FROM DocGen_Job__c WHERE Id = :jobId WITH SYSTEM_MODE LIMIT 1];
             String jobName = String.isNotBlank(job.Label__c) ? job.Label__c : job.Name;
@@ -323,7 +352,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             notification.setBody(successCount + ' documents generated' + (failCount > 0 ? ', ' + failCount + ' failed' : '') + '. Tap to view.');
             notification.send(new Set<String>{ job.CreatedById });
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: Could not send notification: ' + e.getMessage());
+            // Notification failure is non-fatal
         }
     }
 }

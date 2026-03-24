@@ -2,6 +2,7 @@ import { LightningElement, track, wire } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
 import { refreshApex } from '@salesforce/apex';
+import { downloadBase64, extractWhereClause } from 'c/docGenUtils';
 import getBulkTemplates from '@salesforce/apex/DocGenBulkController.getBulkTemplates';
 import validateFilter from '@salesforce/apex/DocGenBulkController.validateFilter';
 import submitJob from '@salesforce/apex/DocGenBulkController.submitJob';
@@ -113,49 +114,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             this.templateSearchTerm = '';
             this.recordCount = null;
             this.loadSavedQueries();
-
-            // Auto-load report filter
-            const tmplData = this._templateDataMap[this.selectedTemplateId];
-            if (tmplData && tmplData.Query_Config__c) {
-                try {
-                    const config = JSON.parse(tmplData.Query_Config__c);
-                    let autoFilter = null;
-                    if (config.bulkWhereClause) {
-                        autoFilter = config.bulkWhereClause;
-                    } else if (config.reportFilters && config.reportFilters.length > 0) {
-                        const parts = config.reportFilters.map(f => {
-                            if (f.operator === 'LIKE') return f.field + " LIKE '%" + f.value + "%'";
-                            if (f.operator === 'IN' || f.operator === 'NOT IN') {
-                                const vals = f.value.split(',').map(v => "'" + v.trim() + "'").join(', ');
-                                return f.field + ' ' + f.operator + ' (' + vals + ')';
-                            }
-                            let v = f.value.trim();
-                            const dateLiterals = ['TODAY','YESTERDAY','TOMORROW','LAST_WEEK','THIS_WEEK','NEXT_WEEK','LAST_MONTH','THIS_MONTH','NEXT_MONTH','LAST_QUARTER','THIS_QUARTER','NEXT_QUARTER','LAST_YEAR','THIS_YEAR','NEXT_YEAR','LAST_90_DAYS','NEXT_90_DAYS'];
-                            const upper = v.toUpperCase();
-                            // Date-only value on a datetime field (e.g. CreatedDate): append time component
-                            const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(v);
-                            const isDateTimeField = f.field && (f.field.toLowerCase().includes('date') || f.field.toLowerCase().includes('time')) && !f.field.toLowerCase().endsWith('__c');
-                            if (isDateOnly && isDateTimeField) {
-                                v = v + 'T00:00:00Z';
-                            }
-                            if (dateLiterals.includes(upper) || upper.startsWith('LAST_N_') || upper.startsWith('NEXT_N_') || /^\d+\.?\d*$/.test(v) || /^\d{4}-\d{2}-\d{2}/.test(v) || upper === 'TRUE' || upper === 'FALSE' || upper === 'NULL') {
-                                return f.field + ' ' + f.operator + ' ' + v;
-                            }
-                            return f.field + " " + f.operator + " '" + f.value + "'";
-                        });
-                        autoFilter = parts.join(' AND ');
-                    }
-                    if (autoFilter) {
-                        this.condition = autoFilter;
-                        this.showToast('Filter Applied', 'Report filter loaded', 'info');
-                        const existingMatch = this.savedQueries.find(q => q.Query_Condition__c === autoFilter);
-                        if (!existingMatch) {
-                            saveQuery({ templateId: this.selectedTemplateId, label: 'From Report', description: 'Auto-saved from report import', condition: autoFilter })
-                                .then(() => this.loadSavedQueries()).catch(() => {});
-                        }
-                    }
-                } catch (e) { /* not JSON */ }
-            }
+            this.applyAutoFilter();
         }
     }
 
@@ -182,20 +141,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             }
 
             // Download the PDF
-            const binaryString = atob(result.base64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            const blob = new Blob([bytes], { type: 'application/pdf' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'Sample_' + (result.title || 'Document') + '.pdf';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            downloadBase64(result.base64, 'Sample_' + (result.title || 'Document') + '.pdf', 'application/pdf');
 
             this.showToast('Success', 'Sample PDF downloaded', 'success');
         } catch (error) {
@@ -298,59 +244,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             this.baseObject = selected.baseObject;
             this.recordCount = null;
             this.loadSavedQueries();
-
-            // Auto-load report filter WHERE clause from template config
-            const tmplData = this._templateDataMap[this.selectedTemplateId];
-            if (tmplData && tmplData.Query_Config__c) {
-                try {
-                    const config = JSON.parse(tmplData.Query_Config__c);
-
-                    // Check for pre-built WHERE clause (saved from report import)
-                    let autoFilter = null;
-                    if (config.bulkWhereClause) {
-                        autoFilter = config.bulkWhereClause;
-                    }
-                    // Fallback: convert reportFilters array to WHERE clause
-                    else if (config.reportFilters && config.reportFilters.length > 0) {
-                        const parts = config.reportFilters.map(f => {
-                            if (f.operator === 'LIKE') return f.field + " LIKE '%" + f.value + "%'";
-                            if (f.operator === 'IN' || f.operator === 'NOT IN') {
-                                const vals = f.value.split(',').map(v => "'" + v.trim() + "'").join(', ');
-                                return f.field + ' ' + f.operator + ' (' + vals + ')';
-                            }
-                            // Date literals, numbers, booleans, dates don't need quotes
-                            const v = f.value.trim();
-                            const dateLiterals = ['TODAY','YESTERDAY','TOMORROW','LAST_WEEK','THIS_WEEK','NEXT_WEEK','LAST_MONTH','THIS_MONTH','NEXT_MONTH','LAST_QUARTER','THIS_QUARTER','NEXT_QUARTER','LAST_YEAR','THIS_YEAR','NEXT_YEAR','LAST_90_DAYS','NEXT_90_DAYS'];
-                            const upper = v.toUpperCase();
-                            if (dateLiterals.includes(upper) || upper.startsWith('LAST_N_') || upper.startsWith('NEXT_N_') || /^\d+$/.test(v) || /^\d{4}-\d{2}-\d{2}/.test(v) || upper === 'TRUE' || upper === 'FALSE' || upper === 'NULL') {
-                                return f.field + ' ' + f.operator + ' ' + v;
-                            }
-                            return f.field + " " + f.operator + " '" + f.value + "'";
-                        });
-                        autoFilter = parts.join(' AND ');
-                    }
-
-                    if (autoFilter) {
-                        this.condition = autoFilter;
-                        this.showToast('Filter Applied', 'Report filter loaded.', 'info');
-
-                        // Auto-save as a saved query if not already saved
-                        const existingMatch = this.savedQueries.find(q => q.Query_Condition__c === autoFilter);
-                        if (!existingMatch) {
-                            saveQuery({
-                                templateId: this.selectedTemplateId,
-                                label: 'From Report',
-                                description: 'Auto-saved from report import',
-                                condition: autoFilter
-                            }).then(() => {
-                                this.loadSavedQueries();
-                            }).catch(() => {});
-                        }
-                    }
-                } catch (e) {
-                    // Not JSON or no filters — that's fine
-                }
-            }
+            this.applyAutoFilter();
         }
     }
 
@@ -359,8 +253,34 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             .then(data => {
                 this.savedQueries = data;
             })
-            .catch(_error => {
+            .catch(() => {
             });
+    }
+
+    /**
+     * Extracts a WHERE clause from the selected template's Query_Config__c
+     * and applies it as the current condition. Auto-saves as a saved query
+     * if not already present.
+     */
+    applyAutoFilter() {
+        const tmplData = this._templateDataMap[this.selectedTemplateId];
+        if (!tmplData || !tmplData.Query_Config__c) return;
+
+        const autoFilter = extractWhereClause(tmplData.Query_Config__c);
+        if (!autoFilter) return;
+
+        this.condition = autoFilter;
+        this.showToast('Filter Applied', 'Report filter loaded.', 'info');
+
+        const existingMatch = this.savedQueries.find(q => q.Query_Condition__c === autoFilter);
+        if (!existingMatch) {
+            saveQuery({
+                templateId: this.selectedTemplateId,
+                label: 'From Report',
+                description: 'Auto-saved from report import',
+                condition: autoFilter
+            }).then(() => this.loadSavedQueries()).catch(() => {});
+        }
     }
 
     handleLoadQuery(event) {
@@ -381,7 +301,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
                 this.showToast('Success', 'Query deleted', 'success');
                 this.loadSavedQueries();
             })
-            .catch(_error => {
+            .catch(() => {
                 this.showToast('Error', 'Failed to delete query', 'error');
             });
     }
@@ -512,7 +432,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
                 this.showToast('Job Finished', `Status: ${this.jobStatus} — ${this.jobProgress.success} succeeded, ${this.jobProgress.error} failed`, variant);
                 this.loadRecentJobs();
             }
-        } catch (_e) {
+        } catch {
             this.stopPolling();
         }
     }

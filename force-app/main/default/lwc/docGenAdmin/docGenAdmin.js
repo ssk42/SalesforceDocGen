@@ -3,6 +3,7 @@ import { createRecord } from 'lightning/uiRecordApi';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
 import { refreshApex } from '@salesforce/apex';
+import { downloadBase64 as downloadBase64Util } from 'c/docGenUtils';
 
 // Apex
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
@@ -198,7 +199,7 @@ const VERSION_COLUMNS = [
         else if (this.currentWizardStep === '2') this.currentWizardStep = '1';
     }
 
-    handleWizardTabActive(_event) {
+    handleWizardTabActive() {
         this.activeMainTab = 'new_template';
         this.resetForm();
     }
@@ -332,7 +333,7 @@ const VERSION_COLUMNS = [
             }
 
             return sections.length > 0 ? sections : null;
-        } catch (e) {
+        } catch {
             return null;
         }
     }
@@ -537,7 +538,7 @@ const VERSION_COLUMNS = [
                     };
                 });
             })
-            .catch(_error => {
+            .catch(() => {
                 this.versions = [];
             });
     }
@@ -825,20 +826,7 @@ const VERSION_COLUMNS = [
      * Downloads a base64-encoded file via an anchor element.
      */
     downloadBase64(base64Data, fileName, mimeType) {
-        const binaryString = atob(base64Data);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        const blob = new Blob([bytes], { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        downloadBase64Util(base64Data, fileName, mimeType);
     }
 
     // --- File Upload ---

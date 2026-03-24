@@ -529,7 +529,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         this._notifyChange();
     }
 
-    _guessLookupField(parentObjectName, relationshipName) {
+    _guessLookupField(parentObjectName) {
         // Common patterns: Account → AccountId, Opportunity → OpportunityId
         // Custom objects: MyObj__c → MyObj__c (lookup field)
         // For standard objects, the lookup field is typically ParentObjectName + 'Id'
@@ -854,7 +854,7 @@ export default class DocGenColumnBuilder extends LightningElement {
                 } else if (version === 2 && config.baseObject) {
                     this._parseV2Config(config);
                 }
-            } catch (e) { /* ignore parse errors for non-JSON */ }
+            } catch { /* ignore parse errors for non-JSON */ }
         } else if (trimmed.length > 0) {
             // V1 flat string — parse field list and subqueries
             this._parseV1Config(trimmed);

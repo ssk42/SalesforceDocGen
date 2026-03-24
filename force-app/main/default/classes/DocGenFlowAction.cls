@@ -1,5 +1,11 @@
+/**
+ * Invocable action for generating a single document from a Flow.
+ */
 public with sharing class DocGenFlowAction {
 
+    /**
+     * Input parameters for the document generation Flow action.
+     */
     public class Request {
         @InvocableVariable(label='Template ID' required=true)
         public Id templateId;
@@ -8,6 +14,9 @@ public with sharing class DocGenFlowAction {
         public Id recordId;
     }
 
+    /**
+     * Output results from the document generation Flow action.
+     */
     public class Response {
         @InvocableVariable(label='Content Document ID')
         public Id contentDocumentId;
@@ -16,6 +25,11 @@ public with sharing class DocGenFlowAction {
         public String errorMessage;
     }
 
+    /**
+     * Generates a document for each request and returns the content document IDs.
+     * @param requests List of Request objects containing templateId and recordId
+     * @return List of Response objects containing contentDocumentId or errorMessage
+     */
     @InvocableMethod(label='Generate Document (Native)' description='Generates a DOCX/PPTX document using the DocGen package. Note: Does not support complex loops or conditional logic in this version.')
     public static List<Response> generateDocument(List<Request> requests) {
         List<Response> responses = new List<Response>();
@@ -28,7 +42,6 @@ public with sharing class DocGenFlowAction {
                 res.contentDocumentId = docId;
             } catch (Exception e) {
                 res.errorMessage = e.getMessage();
-                System.debug(LoggingLevel.ERROR, 'DocGen Flow Error: ' + e.getMessage());
             }
             responses.add(res);
         }

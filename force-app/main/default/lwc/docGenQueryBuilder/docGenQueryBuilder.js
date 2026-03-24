@@ -99,7 +99,7 @@ export default class DocGenQueryBuilder extends LightningElement {
                         variant: 'success',
                     })
                 );
-            } catch (_err) {
+            } catch {
                 this.dispatchEvent(
                     new ShowToastEvent({
                         title: 'Copy Failed',
@@ -972,7 +972,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         // Note: This only selects them in the listbox. User must still click "Add".
     }
     
-    handleOutsideClick(_event) {
+    handleOutsideClick() {
         // ... (Existing)
     }
     
@@ -1028,7 +1028,7 @@ export default class DocGenQueryBuilder extends LightningElement {
                     return c;
                 });
             })
-            .catch(_error => {
+            .catch(() => {
             });
 
         this.selectedChildRel = null;

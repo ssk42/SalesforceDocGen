@@ -110,6 +110,8 @@ public with sharing class DocGenHtmlRenderer {
 
     /**
      * Overload for when no images are present.
+     * @param documentXml The processed word/document.xml content (post-merge)
+     * @return HTML string ready for Blob.toPdf()
      */
     public static String convertToHtml(String documentXml) {
         return convertToHtml(documentXml, new Map<String, String>(), null);
@@ -120,11 +122,11 @@ public with sharing class DocGenHtmlRenderer {
      */
     private static String extractBodyContent(String xml) {
         Integer bodyStart = xml.indexOf('<w:body');
-        if (bodyStart == -1) return xml;
+                if (bodyStart == -1) { return xml; }
 
         Integer bodyContentStart = xml.indexOf('>', bodyStart) + 1;
         Integer bodyEnd = xml.lastIndexOf('</w:body>');
-        if (bodyEnd == -1) return xml.substring(bodyContentStart);
+                if (bodyEnd == -1) { return xml.substring(bodyContentStart); }
 
         // Strip <w:sectPr> (section properties) from end of body
         String content = xml.substring(bodyContentStart, bodyEnd);
@@ -147,7 +149,7 @@ public with sharing class DocGenHtmlRenderer {
 
         while (cursor < xml.length()) {
             Integer nextTag = xml.indexOf('<', cursor);
-            if (nextTag == -1) break;
+                        if (nextTag == -1) { break; }
             cursor = nextTag;
 
             if (xml.substring(cursor).startsWith('<w:tbl')) {
@@ -196,7 +198,7 @@ public with sharing class DocGenHtmlRenderer {
                     Integer j = i + 1;
                     while (j < elements.size() && elementTypes[j] == 'p') {
                         ListInfo nextLi = getListInfo(elements[j]);
-                        if (!nextLi.isList) break;
+                                                if (!nextLi.isList) { break; }
                         listItems.add(elements[j]);
                         j++;
                     }
@@ -221,7 +223,7 @@ public with sharing class DocGenHtmlRenderer {
         li.isNumbered = false;
 
         String pPr = extractElement(pXml, 'w:pPr');
-        if (String.isBlank(pPr)) return li;
+                if (String.isBlank(pPr)) { return li; }
 
         // Check for explicit numbering properties
         if (pPr.contains('<w:numPr')) {
@@ -259,7 +261,7 @@ public with sharing class DocGenHtmlRenderer {
         String result = '<' + tag + '>';
         for (String pXml : listItems) {
             String content = processRuns(pXml, images);
-            if (String.isBlank(content)) content = '&nbsp;';
+                        if (String.isBlank(content)) { content = '&nbsp;'; }
 
             // Extract paragraph-level styles for the <li>
             String pPr = extractElement(pXml, 'w:pPr');
@@ -353,9 +355,9 @@ public with sharing class DocGenHtmlRenderer {
         // Alignment: <w:jc w:val="center"/>
         String jcVal = extractAttr(pPr, 'w:jc', 'w:val');
         if (jcVal != null) {
-            if (jcVal == 'center') styles.add('text-align:center');
-            else if (jcVal == 'right' || jcVal == 'end') styles.add('text-align:right');
-            else if (jcVal == 'both' || jcVal == 'distribute') styles.add('text-align:justify');
+                        if (jcVal == 'center') { styles.add('text-align:center'); }
+                        else if (jcVal == 'right' || jcVal == 'end') { styles.add('text-align:right'); }
+                        else if (jcVal == 'both' || jcVal == 'distribute') { styles.add('text-align:justify'); }
         }
 
         // Spacing: <w:spacing w:before="120" w:after="120" w:line="240" w:lineRule="auto"/>
@@ -422,10 +424,10 @@ public with sharing class DocGenHtmlRenderer {
                 String bottomBdr = parseBorderSide(pBdr, 'w:bottom');
                 String leftBdr = parseBorderSide(pBdr, 'w:left');
                 String rightBdr = parseBorderSide(pBdr, 'w:right');
-                if (topBdr != null) styles.add('border-top:' + topBdr);
-                if (bottomBdr != null) styles.add('border-bottom:' + bottomBdr);
-                if (leftBdr != null) styles.add('border-left:' + leftBdr);
-                if (rightBdr != null) styles.add('border-right:' + rightBdr);
+                                if (topBdr != null) { styles.add('border-top:' + topBdr); }
+                                if (bottomBdr != null) { styles.add('border-bottom:' + bottomBdr); }
+                                if (leftBdr != null) { styles.add('border-left:' + leftBdr); }
+                                if (rightBdr != null) { styles.add('border-right:' + rightBdr); }
                 if (topBdr != null || bottomBdr != null || leftBdr != null || rightBdr != null) {
                     styles.add('padding:4pt');
                 }
@@ -451,7 +453,7 @@ public with sharing class DocGenHtmlRenderer {
      */
     private static String parseBorderSide(String bdrXml, String side) {
         String val = extractAttr(bdrXml, side, 'w:val');
-        if (val == null || val == 'none' || val == 'nil') return null;
+                if (val == null || val == 'none' || val == 'nil') { return null; }
 
         String sz = extractAttr(bdrXml, side, 'w:sz');
         String color = extractAttr(bdrXml, side, 'w:color');
@@ -460,7 +462,7 @@ public with sharing class DocGenHtmlRenderer {
         Decimal widthPt = 1;
         if (sz != null && sz.isNumeric()) {
             widthPt = Integer.valueOf(sz) / 8.0;
-            if (widthPt < 0.5) widthPt = 0.5;
+                        if (widthPt < 0.5) { widthPt = 0.5; }
         }
 
         String cssColor = '#000000';
@@ -470,9 +472,9 @@ public with sharing class DocGenHtmlRenderer {
 
         // Map common Word border styles to CSS
         String cssStyle = 'solid';
-        if (val == 'dashed' || val == 'dashSmallGap') cssStyle = 'dashed';
-        else if (val == 'dotted') cssStyle = 'dotted';
-        else if (val == 'double') cssStyle = 'double';
+                if (val == 'dashed' || val == 'dashSmallGap') { cssStyle = 'dashed'; }
+                else if (val == 'dotted') { cssStyle = 'dotted'; }
+                else if (val == 'double') { cssStyle = 'double'; }
 
         return widthPt + 'pt ' + cssStyle + ' ' + cssColor;
     }
@@ -497,14 +499,14 @@ public with sharing class DocGenHtmlRenderer {
 
             // Find the earliest element
             Integer nextRun = -1;
-            if (runStart != -1 && runStart2 != -1) nextRun = Math.min(runStart, runStart2);
-            else if (runStart != -1) nextRun = runStart;
-            else if (runStart2 != -1) nextRun = runStart2;
+                        if (runStart != -1 && runStart2 != -1) { nextRun = Math.min(runStart, runStart2); }
+                        else if (runStart != -1) { nextRun = runStart; }
+                        else if (runStart2 != -1) { nextRun = runStart2; }
 
             Integer nextDrawing = -1;
-            if (drawingStart != -1 && drawingStart2 != -1) nextDrawing = Math.min(drawingStart, drawingStart2);
-            else if (drawingStart != -1) nextDrawing = drawingStart;
-            else if (drawingStart2 != -1) nextDrawing = drawingStart2;
+                        if (drawingStart != -1 && drawingStart2 != -1) { nextDrawing = Math.min(drawingStart, drawingStart2); }
+                        else if (drawingStart != -1) { nextDrawing = drawingStart; }
+                        else if (drawingStart2 != -1) { nextDrawing = drawingStart2; }
 
             // Find earliest of run, drawing, hyperlink
             Integer nextElement = -1;
@@ -518,7 +520,7 @@ public with sharing class DocGenHtmlRenderer {
                 nextElement = hyperlinkStart; elementType = 'hyperlink';
             }
 
-            if (nextElement == -1) break;
+                        if (nextElement == -1) { break; }
 
             if (elementType == 'run') {
                 Integer runEnd = findClosingTag(pXml, nextRun, 'w:r');
@@ -562,10 +564,10 @@ public with sharing class DocGenHtmlRenderer {
             Integer runStart = hlXml.indexOf('<w:r>', cursor);
             Integer runStart2 = hlXml.indexOf('<w:r ', cursor);
             Integer nextRun = -1;
-            if (runStart != -1 && runStart2 != -1) nextRun = Math.min(runStart, runStart2);
-            else if (runStart != -1) nextRun = runStart;
-            else if (runStart2 != -1) nextRun = runStart2;
-            if (nextRun == -1) break;
+                        if (runStart != -1 && runStart2 != -1) { nextRun = Math.min(runStart, runStart2); }
+                        else if (runStart != -1) { nextRun = runStart; }
+                        else if (runStart2 != -1) { nextRun = runStart2; }
+                        if (nextRun == -1) { break; }
 
             Integer runEnd = findClosingTag(hlXml, nextRun, 'w:r');
             if (runEnd != -1) {
@@ -576,7 +578,7 @@ public with sharing class DocGenHtmlRenderer {
             }
         }
 
-        if (String.isBlank(innerContent)) return '';
+                if (String.isBlank(innerContent)) { return ''; }
 
         // Wrap in styled span to indicate link (blue + underline)
         return '<span style="color:#0563C1;text-decoration:underline">' + innerContent + '</span>';
@@ -606,20 +608,7 @@ public with sharing class DocGenHtmlRenderer {
 
         // Check for tab character
         if (rXml.contains('<w:tab/>') || rXml.contains('<w:tab ')) {
-            // Render tabs as fixed-width space
-            String tabResult = '<span style="display:inline-block;width:36pt"></span>';
-            // Also process any text in the same run
-            String text = extractTextContent(rXml);
-            if (String.isNotBlank(text)) {
-                String rPr = extractElement(rXml, 'w:rPr');
-                if (String.isNotBlank(rPr)) {
-                    String style = parseRunStyle(rPr);
-                    tabResult += '<span style="' + style + '">' + text.escapeHtml4() + '</span>';
-                } else {
-                    tabResult += text.escapeHtml4();
-                }
-            }
-            return tabResult;
+            return processTabRun(rXml);
         }
 
         // Check for drawing (image)
@@ -633,7 +622,7 @@ public with sharing class DocGenHtmlRenderer {
 
         // Extract text (use isEmpty, not isBlank — preserve whitespace-only runs like spaces between bold merge fields)
         String text = extractTextContent(rXml);
-        if (String.isEmpty(text)) return '';
+                if (String.isEmpty(text)) { return ''; }
 
         // Barcode marker — render as CSS bars instead of text
         if (text.contains('##BARCODE:')) {
@@ -696,6 +685,25 @@ public with sharing class DocGenHtmlRenderer {
     }
 
     /**
+     * Processes a run containing a tab character into HTML.
+     * Renders the tab as a fixed-width space and appends any styled text.
+     */
+    private static String processTabRun(String rXml) {
+        String tabResult = '<span style="display:inline-block;width:36pt"></span>';
+        String text = extractTextContent(rXml);
+        if (String.isBlank(text)) { return tabResult; }
+
+        String rPr = extractElement(rXml, 'w:rPr');
+        if (String.isNotBlank(rPr)) {
+            String style = parseRunStyle(rPr);
+            tabResult += '<span style="' + style + '">' + text.escapeHtml4() + '</span>';
+        } else {
+            tabResult += text.escapeHtml4();
+        }
+        return tabResult;
+    }
+
+    /**
      * Parses <w:rPr> into CSS style string.
      */
     private static String parseRunStyle(String rPr) {
@@ -703,7 +711,7 @@ public with sharing class DocGenHtmlRenderer {
 
         // Font: <w:rFonts w:ascii="Calibri"/>
         String font = extractAttr(rPr, 'w:rFonts', 'w:ascii');
-        if (font == null) font = extractAttr(rPr, 'w:rFonts', 'w:hAnsi');
+                if (font == null) { font = extractAttr(rPr, 'w:rFonts', 'w:hAnsi'); }
         if (font != null) {
             styles.add('font-family:\'' + font.escapeHtml4() + '\',sans-serif');
         }
@@ -783,9 +791,9 @@ public with sharing class DocGenHtmlRenderer {
                 String topMar = extractAttr(tblCellMar, 'w:top', 'w:w');
                 String bottomMar = extractAttr(tblCellMar, 'w:bottom', 'w:w');
                 String leftMar = extractAttr(tblCellMar, 'w:left', 'w:w');
-                if (leftMar == null) leftMar = extractAttr(tblCellMar, 'w:start', 'w:w');
+                                if (leftMar == null) { leftMar = extractAttr(tblCellMar, 'w:start', 'w:w'); }
                 String rightMar = extractAttr(tblCellMar, 'w:right', 'w:w');
-                if (rightMar == null) rightMar = extractAttr(tblCellMar, 'w:end', 'w:w');
+                                if (rightMar == null) { rightMar = extractAttr(tblCellMar, 'w:end', 'w:w'); }
                 // These values will be used on cells; for now they affect the table-level default
             }
         }
@@ -795,10 +803,10 @@ public with sharing class DocGenHtmlRenderer {
         Integer cursor = 0;
         while (cursor < tblXml.length()) {
             Integer trStart = tblXml.indexOf('<w:tr', cursor);
-            if (trStart == -1) break;
+                        if (trStart == -1) { break; }
 
             Integer trEnd = findClosingTag(tblXml, trStart, 'w:tr');
-            if (trEnd == -1) break;
+                        if (trEnd == -1) { break; }
 
             rows += processTableRow(tblXml.substring(trStart, trEnd), images, tblPr, hasBorders);
             cursor = trEnd;
@@ -820,10 +828,10 @@ public with sharing class DocGenHtmlRenderer {
 
         while (cursor < trXml.length()) {
             Integer tcStart = trXml.indexOf('<w:tc', cursor);
-            if (tcStart == -1) break;
+                        if (tcStart == -1) { break; }
 
             Integer tcEnd = findClosingTag(trXml, tcStart, 'w:tc');
-            if (tcEnd == -1) break;
+                        if (tcEnd == -1) { break; }
 
             cells += processTableCell(trXml.substring(tcStart, tcEnd), images, tblPr, hasBorders, isHeader);
             cursor = tcEnd;
@@ -868,22 +876,10 @@ public with sharing class DocGenHtmlRenderer {
             }
 
             // Cell-specific borders: <w:tcBorders>
-            if (tcPr.contains('<w:tcBorders')) {
-                String tcBdr = extractElement(tcPr, 'w:tcBorders');
-                if (String.isNotBlank(tcBdr)) {
-                    String topBdr = parseBorderSide(tcBdr, 'w:top');
-                    String bottomBdr = parseBorderSide(tcBdr, 'w:bottom');
-                    String leftBdr = parseBorderSide(tcBdr, 'w:left');
-                    if (leftBdr == null) leftBdr = parseBorderSide(tcBdr, 'w:start');
-                    String rightBdr = parseBorderSide(tcBdr, 'w:right');
-                    if (rightBdr == null) rightBdr = parseBorderSide(tcBdr, 'w:end');
-                    if (topBdr != null) styles.add('border-top:' + topBdr);
-                    if (bottomBdr != null) styles.add('border-bottom:' + bottomBdr);
-                    if (leftBdr != null) styles.add('border-left:' + leftBdr);
-                    if (rightBdr != null) styles.add('border-right:' + rightBdr);
-                }
+            String tcBdr = tcPr.contains('<w:tcBorders') ? extractElement(tcPr, 'w:tcBorders') : null;
+            if (String.isNotBlank(tcBdr)) {
+                addBorderStyles(styles, tcBdr);
             } else if (hasBorders) {
-                // Fall back to table-level borders
                 styles.add('border:1px solid #000');
             }
 
@@ -894,23 +890,10 @@ public with sharing class DocGenHtmlRenderer {
             }
 
             // Cell padding: <w:tcMar>
-            if (tcPr.contains('<w:tcMar')) {
-                String tcMar = extractElement(tcPr, 'w:tcMar');
-                if (String.isNotBlank(tcMar)) {
-                    String cellPadTop = extractAttr(tcMar, 'w:top', 'w:w');
-                    String cellPadBottom = extractAttr(tcMar, 'w:bottom', 'w:w');
-                    String cellPadLeft = extractAttr(tcMar, 'w:left', 'w:w');
-                    if (cellPadLeft == null) cellPadLeft = extractAttr(tcMar, 'w:start', 'w:w');
-                    String cellPadRight = extractAttr(tcMar, 'w:right', 'w:w');
-                    if (cellPadRight == null) cellPadRight = extractAttr(tcMar, 'w:end', 'w:w');
-
-                    List<String> padParts = new List<String>();
-                    padParts.add((cellPadTop != null && cellPadTop.isNumeric()) ? twipsToPt(Integer.valueOf(cellPadTop)) + 'pt' : '4pt');
-                    padParts.add((cellPadRight != null && cellPadRight.isNumeric()) ? twipsToPt(Integer.valueOf(cellPadRight)) + 'pt' : '4pt');
-                    padParts.add((cellPadBottom != null && cellPadBottom.isNumeric()) ? twipsToPt(Integer.valueOf(cellPadBottom)) + 'pt' : '4pt');
-                    padParts.add((cellPadLeft != null && cellPadLeft.isNumeric()) ? twipsToPt(Integer.valueOf(cellPadLeft)) + 'pt' : '4pt');
-                    styles.add('padding:' + String.join(padParts, ' '));
-                }
+            // Cell padding: <w:tcMar>
+            String tcMar = tcPr.contains('<w:tcMar') ? extractElement(tcPr, 'w:tcMar') : null;
+            if (String.isNotBlank(tcMar)) {
+                addCellPaddingStyles(styles, tcMar);
             }
         } else if (hasBorders) {
             styles.add('border:1px solid #000');
@@ -922,10 +905,45 @@ public with sharing class DocGenHtmlRenderer {
         String styleStr = String.join(styles, ';');
         String tag = isHeader ? 'th' : 'td';
         String attrs = '';
-        if (String.isNotBlank(styleStr)) attrs += ' style="' + styleStr + '"';
-        if (colspan > 1) attrs += ' colspan="' + colspan + '"';
+                if (String.isNotBlank(styleStr)) { attrs += ' style="' + styleStr + '"'; }
+                if (colspan > 1) { attrs += ' colspan="' + colspan + '"'; }
 
         return '<' + tag + attrs + '>' + content + '</' + tag + '>';
+    }
+
+    /**
+     * Adds border CSS styles from a tcBorders element.
+     */
+    private static void addBorderStyles(List<String> styles, String bdrXml) {
+        String topBdr = parseBorderSide(bdrXml, 'w:top');
+        String bottomBdr = parseBorderSide(bdrXml, 'w:bottom');
+        String leftBdr = parseBorderSide(bdrXml, 'w:left');
+        if (leftBdr == null) { leftBdr = parseBorderSide(bdrXml, 'w:start'); }
+        String rightBdr = parseBorderSide(bdrXml, 'w:right');
+        if (rightBdr == null) { rightBdr = parseBorderSide(bdrXml, 'w:end'); }
+        if (topBdr != null) { styles.add('border-top:' + topBdr); }
+        if (bottomBdr != null) { styles.add('border-bottom:' + bottomBdr); }
+        if (leftBdr != null) { styles.add('border-left:' + leftBdr); }
+        if (rightBdr != null) { styles.add('border-right:' + rightBdr); }
+    }
+
+    /**
+     * Adds cell padding CSS from a tcMar element.
+     */
+    private static void addCellPaddingStyles(List<String> styles, String tcMar) {
+        String cellPadTop = extractAttr(tcMar, 'w:top', 'w:w');
+        String cellPadBottom = extractAttr(tcMar, 'w:bottom', 'w:w');
+        String cellPadLeft = extractAttr(tcMar, 'w:left', 'w:w');
+        if (cellPadLeft == null) { cellPadLeft = extractAttr(tcMar, 'w:start', 'w:w'); }
+        String cellPadRight = extractAttr(tcMar, 'w:right', 'w:w');
+        if (cellPadRight == null) { cellPadRight = extractAttr(tcMar, 'w:end', 'w:w'); }
+
+        List<String> padParts = new List<String>();
+        padParts.add((cellPadTop != null && cellPadTop.isNumeric()) ? twipsToPt(Integer.valueOf(cellPadTop)) + 'pt' : '4pt');
+        padParts.add((cellPadRight != null && cellPadRight.isNumeric()) ? twipsToPt(Integer.valueOf(cellPadRight)) + 'pt' : '4pt');
+        padParts.add((cellPadBottom != null && cellPadBottom.isNumeric()) ? twipsToPt(Integer.valueOf(cellPadBottom)) + 'pt' : '4pt');
+        padParts.add((cellPadLeft != null && cellPadLeft.isNumeric()) ? twipsToPt(Integer.valueOf(cellPadLeft)) + 'pt' : '4pt');
+        styles.add('padding:' + String.join(padParts, ' '));
     }
 
     /**
@@ -938,8 +956,8 @@ public with sharing class DocGenHtmlRenderer {
 
         String cx = extractAttr(drawingXml, 'wp:extent', 'cx');
         String cy = extractAttr(drawingXml, 'wp:extent', 'cy');
-        if (cx == null) cx = extractAttr(drawingXml, 'a:ext', 'cx');
-        if (cy == null) cy = extractAttr(drawingXml, 'a:ext', 'cy');
+                if (cx == null) { cx = extractAttr(drawingXml, 'a:ext', 'cx'); }
+                if (cy == null) { cy = extractAttr(drawingXml, 'a:ext', 'cy'); }
 
         if (cx != null && cx.isNumeric()) {
             widthPx = Math.round(Long.valueOf(cx) * EMU_TO_PX);
@@ -950,10 +968,10 @@ public with sharing class DocGenHtmlRenderer {
 
         // Extract relationship ID from <a:blip r:embed="rIdImg1"/>
         String relId = extractAttr(drawingXml, 'a:blip', 'r:embed');
-        if (relId == null) return '';
+                if (relId == null) { return ''; }
 
         String imageValue = images.get(relId);
-        if (imageValue == null) return '';
+                if (imageValue == null) { return ''; }
 
         // If the value is a URL (Salesforce content path or absolute URL), use directly as img src
         if (imageValue.startsWith('/sfc/') || imageValue.startsWith('/servlet/') ||
@@ -985,11 +1003,11 @@ public with sharing class DocGenHtmlRenderer {
 
         while (cursor < xml.length()) {
             Integer tStart = xml.indexOf('<w:t', cursor);
-            if (tStart == -1) break;
+                        if (tStart == -1) { break; }
 
             // Skip self-closing <w:t/>
             Integer tagEnd = xml.indexOf('>', tStart);
-            if (tagEnd == -1) break;
+                        if (tagEnd == -1) { break; }
 
             if (xml.substring(tagEnd - 1, tagEnd) == '/') {
                 cursor = tagEnd + 1;
@@ -998,7 +1016,7 @@ public with sharing class DocGenHtmlRenderer {
 
             Integer contentStart = tagEnd + 1;
             Integer tEnd = xml.indexOf('</w:t>', contentStart);
-            if (tEnd == -1) break;
+                        if (tEnd == -1) { break; }
 
             result += xml.substring(contentStart, tEnd);
             cursor = tEnd + 6; // length of </w:t>
@@ -1020,17 +1038,17 @@ public with sharing class DocGenHtmlRenderer {
      */
     private static String extractElement(String xml, String tagName) {
         Integer start = xml.indexOf('<' + tagName);
-        if (start == -1) return null;
+                if (start == -1) { return null; }
 
         // Check for self-closing
         Integer tagEnd = xml.indexOf('>', start);
-        if (tagEnd == -1) return null;
+                if (tagEnd == -1) { return null; }
         if (xml.substring(tagEnd - 1, tagEnd) == '/') {
             return xml.substring(start, tagEnd + 1);
         }
 
         Integer endPos = findClosingTag(xml, start, tagName);
-        if (endPos == -1) return xml.substring(start, tagEnd + 1);
+                if (endPos == -1) { return xml.substring(start, tagEnd + 1); }
         return xml.substring(start, endPos);
     }
 
@@ -1040,18 +1058,18 @@ public with sharing class DocGenHtmlRenderer {
      */
     private static String extractAttr(String xml, String tagName, String attrName) {
         Integer tagStart = xml.indexOf('<' + tagName);
-        if (tagStart == -1) return null;
+                if (tagStart == -1) { return null; }
 
         Integer tagEnd = xml.indexOf('>', tagStart);
-        if (tagEnd == -1) return null;
+                if (tagEnd == -1) { return null; }
 
         String tagContent = xml.substring(tagStart, tagEnd + 1);
         Integer attrStart = tagContent.indexOf(attrName + '="');
-        if (attrStart == -1) return null;
+                if (attrStart == -1) { return null; }
 
         Integer valueStart = attrStart + attrName.length() + 2; // skip attr="
         Integer valueEnd = tagContent.indexOf('"', valueStart);
-        if (valueEnd == -1) return null;
+                if (valueEnd == -1) { return null; }
 
         return tagContent.substring(valueStart, valueEnd);
     }
@@ -1070,18 +1088,19 @@ public with sharing class DocGenHtmlRenderer {
             Integer nextOpen = xml.indexOf(openTag, cursor);
             Integer nextClose = xml.indexOf(closeTag, cursor);
 
-            if (nextClose == -1) return -1;
+                        if (nextClose == -1) { return -1; }
 
             if (nextOpen != -1 && nextOpen < nextClose) {
                 // Check if it's actually the tag (not a prefix match like <w:tblPr matching <w:tbl)
                 Integer afterOpen = nextOpen + openTag.length();
-                if (afterOpen < xml.length()) {
-                    String nextChar = xml.substring(afterOpen, afterOpen + 1);
-                    if (nextChar == '>' || nextChar == ' ' || nextChar == '/') {
-                        depth++;
-                        cursor = afterOpen;
-                        continue;
-                    }
+                Boolean isRealTag = afterOpen < xml.length() &&
+                    (xml.substring(afterOpen, afterOpen + 1) == '>' ||
+                     xml.substring(afterOpen, afterOpen + 1) == ' ' ||
+                     xml.substring(afterOpen, afterOpen + 1) == '/');
+                if (isRealTag) {
+                    depth++;
+                    cursor = afterOpen;
+                    continue;
                 }
                 // Not a real match, skip past it
                 cursor = afterOpen;
@@ -1120,9 +1139,9 @@ public with sharing class DocGenHtmlRenderer {
     private static String renderBarcodeHtml(String text) {
         // Extract marker: ##BARCODE:type:size:VALUE##
         Integer startIdx = text.indexOf('##BARCODE:');
-        if (startIdx == -1) return text.escapeHtml4();
+                if (startIdx == -1) { return text.escapeHtml4(); }
         Integer endIdx = text.indexOf('##', startIdx + 10);
-        if (endIdx == -1) return text.escapeHtml4();
+                if (endIdx == -1) { return text.escapeHtml4(); }
 
         String marker = text.substring(startIdx + 10, endIdx);
         List<String> parts = marker.split(':', 3);
@@ -1134,7 +1153,7 @@ public with sharing class DocGenHtmlRenderer {
         value = value.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>');
 
         String pattern = BarcodeGenerator.getPattern(value, barcodeType);
-        if (pattern == null) return value.escapeHtml4();
+                if (pattern == null) { return value.escapeHtml4(); }
 
         String html;
         if (barcodeType == 'qr') {

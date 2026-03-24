@@ -43,16 +43,27 @@ public with sharing class DocGenDataRetriever {
      * Used by DocGenBatch to decide whether bulk caching is available.
      */
     public static Integer getConfigVersion(String fieldsConfig) {
-        if (String.isBlank(fieldsConfig) || !fieldsConfig.trim().startsWith('{')) return 1;
+        if (String.isBlank(fieldsConfig) || !fieldsConfig.trim().startsWith('{')) {
+            return 1;
+        }
         try {
             Map<String, Object> jsonConfig = (Map<String, Object>) JSON.deserializeUntyped(fieldsConfig.trim());
             Object versionObj = jsonConfig.get('v');
             return (versionObj != null) ? Integer.valueOf(String.valueOf(versionObj)) : 2;
         } catch (Exception e) {
+            // Malformed JSON — fall back to V1 (legacy flat string format)
             return 1;
         }
     }
 
+    /**
+     * Executes a dynamic SOQL query based on the fields configuration and record ID.
+     * Auto-detects config version (V1 flat, V2 JSON, V3 tree) and routes accordingly.
+     * @param recordId The ID of the record to query
+     * @param baseObject The API name of the base SObject
+     * @param fieldsConfig The query configuration string (V1/V2/V3 format)
+     * @return Map of field names to values, with child relationships nested
+     */
     public static Map<String, Object> getRecordData(Id recordId, String baseObject, String fieldsConfig) {
         if (String.isBlank(baseObject) || String.isBlank(fieldsConfig) || recordId == null) {
             throw new AuraHandledException('Invalid parameters for data retrieval.');
@@ -82,17 +93,20 @@ public with sharing class DocGenDataRetriever {
 
         // Build Level 0 query: flat fields + direct child subqueries (no nesting)
         String level0Select = buildLevel0Select(flatParts, deepSpecs);
-        if (String.isBlank(level0Select)) level0Select = 'Id';
+        if (String.isBlank(level0Select)) {
+            level0Select = 'Id';
+        }
 
         String query = 'SELECT ' + level0Select + ' FROM ' + String.escapeSingleQuotes(baseObject) + ' WHERE Id = :recordId LIMIT 1';
 
         Map<String, Object> data;
         try {
             List<SObject> results = Database.query(query, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - field names from template config validated by Schema describe; base object escaped; runs with USER_MODE
-            if (results.isEmpty()) return null;
+            if (results.isEmpty()) {
+                return null;
+            }
             data = mapSObject(results[0]);
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: Query execution error: ' + e.getMessage());
             throw new AuraHandledException('Error executing query. Please verify your template configuration.');
         }
 
@@ -128,13 +142,17 @@ public with sharing class DocGenDataRetriever {
         // Base fields
         List<Object> baseFields = (List<Object>) config.get('baseFields');
         if (baseFields != null) {
-            for (Object f : baseFields) selectParts.add(String.valueOf(f));
+            for (Object f : baseFields) {
+                selectParts.add(String.valueOf(f));
+            }
         }
 
         // Parent fields (Account.Name, Owner.Email)
         List<Object> parentFields = (List<Object>) config.get('parentFields');
         if (parentFields != null) {
-            for (Object f : parentFields) selectParts.add(String.valueOf(f));
+            for (Object f : parentFields) {
+                selectParts.add(String.valueOf(f));
+            }
         }
 
         // Direct child subqueries
@@ -145,7 +163,9 @@ public with sharing class DocGenDataRetriever {
                 Map<String, Object> child = (Map<String, Object>) childObj;
                 String rel = (String) child.get('rel');
                 List<Object> fields = (List<Object>) child.get('fields');
-                if (rel == null || fields == null || fields.isEmpty()) continue;
+                if (rel == null || fields == null || fields.isEmpty()) {
+                    continue;
+                }
 
                 List<String> fieldNames = new List<String>();
                 for (Object f : fields) fieldNames.add(String.valueOf(f));
@@ -154,9 +174,15 @@ public with sharing class DocGenDataRetriever {
                 String w = sanitizeClause((String) child.get('where'), 'WHERE');
                 String o = sanitizeClause((String) child.get('orderBy'), 'ORDER BY');
                 String l = sanitizeClause((String) child.get('limit'), 'LIMIT');
-                if (String.isNotBlank(w)) subquery += ' WHERE ' + w;
-                if (String.isNotBlank(o)) subquery += ' ORDER BY ' + o;
-                if (String.isNotBlank(l)) subquery += ' LIMIT ' + l;
+                if (String.isNotBlank(w)) {
+                    subquery += ' WHERE ' + w;
+                }
+                if (String.isNotBlank(o)) {
+                    subquery += ' ORDER BY ' + o;
+                }
+                if (String.isNotBlank(l)) {
+                    subquery += ' LIMIT ' + l;
+                }
                 subquery += ')';
                 selectParts.add(subquery);
 
@@ -184,11 +210,19 @@ public with sharing class DocGenDataRetriever {
 
                 js.junctionFields = new List<String>();
                 List<Object> jf = (List<Object>) j.get('junctionFields');
-                if (jf != null) for (Object f : jf) js.junctionFields.add(String.valueOf(f));
+                if (jf != null) {
+                    for (Object f : jf) {
+                        js.junctionFields.add(String.valueOf(f));
+                    }
+                }
 
                 js.targetFields = new List<String>();
                 List<Object> tf = (List<Object>) j.get('targetFields');
-                if (tf != null) for (Object f : tf) js.targetFields.add(String.valueOf(f));
+                if (tf != null) {
+                    for (Object f : tf) {
+                        js.targetFields.add(String.valueOf(f));
+                    }
+                }
 
                 junctionSpecs.add(js);
 
@@ -200,7 +234,9 @@ public with sharing class DocGenDataRetriever {
             }
         }
 
-        if (selectParts.isEmpty()) selectParts.add('Id');
+        if (selectParts.isEmpty()) {
+            selectParts.add('Id');
+        }
 
         // Execute Level 0 query
         String query = 'SELECT ' + String.join(selectParts, ', ') + ' FROM ' +
@@ -209,10 +245,11 @@ public with sharing class DocGenDataRetriever {
         Map<String, Object> data;
         try {
             List<SObject> results = Database.query(query, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - field names from V2 query config; base object escaped; runs with USER_MODE
-            if (results.isEmpty()) return null;
+            if (results.isEmpty()) {
+                return null;
+            }
             data = mapSObject(results[0]);
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: V2 query error: ' + e.getMessage());
             throw new AuraHandledException('Error executing query. Please verify your template configuration.');
         }
 
@@ -231,14 +268,20 @@ public with sharing class DocGenDataRetriever {
      */
     private static void stitchJunctionTargets(Map<String, Object> data, JunctionSpec js) {
         Object junctionData = data.get(js.junctionRel);
-        if (junctionData == null || !(junctionData instanceof Map<String, Object>)) return;
+        if (junctionData == null || !(junctionData instanceof Map<String, Object>)) {
+            return;
+        }
 
         Map<String, Object> jMap = (Map<String, Object>) junctionData;
         Object recordsObj = jMap.get('records');
-        if (recordsObj == null || !(recordsObj instanceof List<Object>)) return;
+        if (recordsObj == null || !(recordsObj instanceof List<Object>)) {
+            return;
+        }
 
         List<Object> junctionRecords = (List<Object>) recordsObj;
-        if (junctionRecords.isEmpty()) return;
+        if (junctionRecords.isEmpty()) {
+            return;
+        }
 
         // Collect target IDs from junction records
         Set<Id> targetIds = new Set<Id>();
@@ -246,21 +289,33 @@ public with sharing class DocGenDataRetriever {
             if (rec instanceof Map<String, Object>) {
                 Object idVal = ((Map<String, Object>) rec).get(js.targetIdField);
                 if (idVal != null) {
-                    try { targetIds.add(Id.valueOf(String.valueOf(idVal))); } catch (Exception e) { /* skip */ }
+                    try {
+                        targetIds.add(Id.valueOf(String.valueOf(idVal)));
+                    } catch (Exception e) {
+                        // Non-ID value in junction lookup field — skip this record
+                    }
                 }
             }
         }
-        if (targetIds.isEmpty()) return;
+        if (targetIds.isEmpty()) {
+            return;
+        }
 
         // Query target objects
         List<String> targetFieldList = new List<String>(js.targetFields);
-        if (!targetFieldList.contains('Id')) targetFieldList.add(0, 'Id');
+        if (!targetFieldList.contains('Id')) {
+            targetFieldList.add(0, 'Id');
+        }
 
         String targetQuery = 'SELECT ' + String.join(targetFieldList, ', ') +
             ' FROM ' + String.escapeSingleQuotes(js.targetObject) +
             ' WHERE Id IN :targetIds';
-        if (String.isNotBlank(js.targetWhere)) targetQuery += ' AND ' + sanitizeClause(js.targetWhere, 'WHERE');
-        if (String.isNotBlank(js.targetOrderBy)) targetQuery += ' ORDER BY ' + sanitizeClause(js.targetOrderBy, 'ORDER BY');
+        if (String.isNotBlank(js.targetWhere)) {
+            targetQuery += ' AND ' + sanitizeClause(js.targetWhere, 'WHERE');
+        }
+        if (String.isNotBlank(js.targetOrderBy)) {
+            targetQuery += ' ORDER BY ' + sanitizeClause(js.targetOrderBy, 'ORDER BY');
+        }
 
         Map<Id, Map<String, Object>> targetMap = new Map<Id, Map<String, Object>>();
         try {
@@ -268,19 +323,28 @@ public with sharing class DocGenDataRetriever {
                 targetMap.put(targetRec.Id, mapSObject(targetRec));
             }
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: Junction target query failed: ' + e.getMessage());
+            // Junction target query failed — skip stitching for this junction
             return;
         }
 
         // Stitch target data into each junction record
         for (Object rec : junctionRecords) {
-            if (!(rec instanceof Map<String, Object>)) continue;
+            if (!(rec instanceof Map<String, Object>)) {
+                continue;
+            }
             Map<String, Object> jRec = (Map<String, Object>) rec;
             Object targetIdVal = jRec.get(js.targetIdField);
-            if (targetIdVal == null) continue;
+            if (targetIdVal == null) {
+                continue;
+            }
 
             Id targetId;
-            try { targetId = Id.valueOf(String.valueOf(targetIdVal)); } catch (Exception e) { continue; }
+            try {
+                targetId = Id.valueOf(String.valueOf(targetIdVal));
+            } catch (Exception e) {
+                // Non-ID value in target lookup — skip this junction record
+                continue;
+            }
 
             Map<String, Object> targetData = targetMap.get(targetId);
             if (targetData != null) {
@@ -341,11 +405,19 @@ public with sharing class DocGenDataRetriever {
 
             tn.fields = new List<String>();
             List<Object> flds = (List<Object>) n.get('fields');
-            if (flds != null) for (Object f : flds) tn.fields.add(String.valueOf(f));
+            if (flds != null) {
+                for (Object f : flds) {
+                    tn.fields.add(String.valueOf(f));
+                }
+            }
 
             tn.parentFields = new List<String>();
             List<Object> pFlds = (List<Object>) n.get('parentFields');
-            if (pFlds != null) for (Object f : pFlds) tn.parentFields.add(String.valueOf(f));
+            if (pFlds != null) {
+                for (Object f : pFlds) {
+                    tn.parentFields.add(String.valueOf(f));
+                }
+            }
 
             allNodes.add(tn);
             nodeMap.put(tn.id, tn);
@@ -354,7 +426,10 @@ public with sharing class DocGenDataRetriever {
         // Find root node (parentNode is null)
         TreeNode root = null;
         for (TreeNode tn : allNodes) {
-            if (tn.parentNodeId == null) { root = tn; break; }
+            if (tn.parentNodeId == null) {
+                root = tn;
+                break;
+            }
         }
         if (root == null) {
             throw new AuraHandledException('No root node found in query tree.');
@@ -364,7 +439,9 @@ public with sharing class DocGenDataRetriever {
         List<String> rootSelect = new List<String>();
         rootSelect.addAll(root.fields);
         rootSelect.addAll(root.parentFields);
-        if (rootSelect.isEmpty()) rootSelect.add('Id');
+        if (rootSelect.isEmpty()) {
+            rootSelect.add('Id');
+        }
 
         String rootQuery = 'SELECT ' + String.join(rootSelect, ', ') +
             ' FROM ' + String.escapeSingleQuotes(root.objectApiName) +
@@ -373,10 +450,11 @@ public with sharing class DocGenDataRetriever {
         Map<String, Object> rootData;
         try {
             List<SObject> results = Database.query(rootQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - V3 tree node fields from query config; object name escaped; runs with USER_MODE
-            if (results.isEmpty()) return null;
+            if (results.isEmpty()) {
+                return null;
+            }
             rootData = mapSObject(results[0]);
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: V3 root query error: ' + e.getMessage());
             throw new AuraHandledException('Error querying root record: ' + e.getMessage());
         }
 
@@ -392,7 +470,9 @@ public with sharing class DocGenDataRetriever {
      * Used by DocGenBatch to pre-cache data for all records in one transaction.
      */
     public static Map<Id, Map<String, Object>> getRecordDataV3Bulk(Set<Id> recordIds, Map<String, Object> config) {
-        if (recordIds == null || recordIds.isEmpty()) return new Map<Id, Map<String, Object>>();
+        if (recordIds == null || recordIds.isEmpty()) {
+            return new Map<Id, Map<String, Object>>();
+        }
 
         // Parse all nodes (same as single-record version)
         List<TreeNode> allNodes = new List<TreeNode>();
@@ -418,11 +498,19 @@ public with sharing class DocGenDataRetriever {
 
             tn.fields = new List<String>();
             List<Object> flds = (List<Object>) n.get('fields');
-            if (flds != null) for (Object f : flds) tn.fields.add(String.valueOf(f));
+            if (flds != null) {
+                for (Object f : flds) {
+                    tn.fields.add(String.valueOf(f));
+                }
+            }
 
             tn.parentFields = new List<String>();
             List<Object> pFlds = (List<Object>) n.get('parentFields');
-            if (pFlds != null) for (Object f : pFlds) tn.parentFields.add(String.valueOf(f));
+            if (pFlds != null) {
+                for (Object f : pFlds) {
+                    tn.parentFields.add(String.valueOf(f));
+                }
+            }
 
             allNodes.add(tn);
             nodeMap.put(tn.id, tn);
@@ -431,7 +519,10 @@ public with sharing class DocGenDataRetriever {
         // Find root node
         TreeNode root = null;
         for (TreeNode tn : allNodes) {
-            if (tn.parentNodeId == null) { root = tn; break; }
+            if (tn.parentNodeId == null) {
+                root = tn;
+                break;
+            }
         }
         if (root == null) {
             throw new AuraHandledException('No root node found in query tree.');
@@ -441,8 +532,12 @@ public with sharing class DocGenDataRetriever {
         List<String> rootSelect = new List<String>();
         rootSelect.addAll(root.fields);
         rootSelect.addAll(root.parentFields);
-        if (rootSelect.isEmpty()) rootSelect.add('Id');
-        if (!rootSelect.contains('Id')) rootSelect.add(0, 'Id');
+        if (rootSelect.isEmpty()) {
+            rootSelect.add('Id');
+        }
+        if (!rootSelect.contains('Id')) {
+            rootSelect.add(0, 'Id');
+        }
 
         String rootQuery = 'SELECT ' + String.join(rootSelect, ', ') +
             ' FROM ' + String.escapeSingleQuotes(root.objectApiName) +
@@ -455,7 +550,6 @@ public with sharing class DocGenDataRetriever {
                 allData.put(rec.Id, mapSObject(rec));
             }
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: V3 bulk root query error: ' + e.getMessage());
             throw new AuraHandledException('Error bulk-querying records: ' + e.getMessage());
         }
 
@@ -479,25 +573,37 @@ public with sharing class DocGenDataRetriever {
         // Find children of this parent
         List<TreeNode> children = new List<TreeNode>();
         for (TreeNode tn : allNodes) {
-            if (tn.parentNodeId == parentId) children.add(tn);
+            if (tn.parentNodeId == parentId) {
+                children.add(tn);
+            }
         }
 
         for (TreeNode child : children) {
-            if (String.isBlank(child.lookupField) || String.isBlank(child.relationshipName)) continue;
+            if (String.isBlank(child.lookupField) || String.isBlank(child.relationshipName)) {
+                continue;
+            }
 
             // Collect parent record IDs
             Set<Id> parentIds = new Set<Id>();
             if (isSingleParent) {
                 Object idVal = parentDataMap.get('Id');
                 if (idVal != null) {
-                    try { parentIds.add(Id.valueOf(String.valueOf(idVal))); } catch (Exception e) { /* skip */ }
+                    try {
+                        parentIds.add(Id.valueOf(String.valueOf(idVal)));
+                    } catch (Exception e) {
+                        // Non-ID value in parent record — skip
+                    }
                 }
             }
-            if (parentIds.isEmpty()) continue;
+            if (parentIds.isEmpty()) {
+                continue;
+            }
 
             // Build child query
             List<String> selectFields = new List<String>();
-            if (!child.fields.contains('Id')) selectFields.add('Id');
+            if (!child.fields.contains('Id')) {
+                selectFields.add('Id');
+            }
             selectFields.addAll(child.fields);
             selectFields.addAll(child.parentFields);
             selectFields.add(child.lookupField);
@@ -512,7 +618,9 @@ public with sharing class DocGenDataRetriever {
                 if (jFields != null) {
                     for (Object jf : jFields) {
                         String jfs = String.valueOf(jf);
-                        if (!selectFields.contains(jfs)) selectFields.add(jfs);
+                        if (!selectFields.contains(jfs)) {
+                            selectFields.add(jfs);
+                        }
                     }
                 }
             }
@@ -528,7 +636,7 @@ public with sharing class DocGenDataRetriever {
             try {
                 childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - V3 child node fields from query config; clauses sanitized by sanitizeClause(); runs with USER_MODE
             } catch (Exception e) {
-                System.debug(LoggingLevel.WARN, 'DocGen: V3 child query error for ' + child.objectApiName + ': ' + e.getMessage());
+                // Child query failed — skip this child relationship
                 continue;
             }
 
@@ -546,7 +654,12 @@ public with sharing class DocGenDataRetriever {
             Object parentIdVal = parentDataMap.get('Id');
             if (parentIdVal != null) {
                 Id parentRecId;
-                try { parentRecId = Id.valueOf(String.valueOf(parentIdVal)); } catch (Exception e) { continue; }
+                try {
+                    parentRecId = Id.valueOf(String.valueOf(parentIdVal));
+                } catch (Exception e) {
+                    // Non-ID value in parent Id field — skip stitching
+                    continue;
+                }
 
                 List<Map<String, Object>> childRecords = grouped.containsKey(parentRecId)
                     ? grouped.get(parentRecId) : new List<Map<String, Object>>();
@@ -587,15 +700,21 @@ public with sharing class DocGenDataRetriever {
         }
 
         for (TreeNode child : children) {
-            if (String.isBlank(child.lookupField) || String.isBlank(child.relationshipName)) continue;
+            if (String.isBlank(child.lookupField) || String.isBlank(child.relationshipName)) {
+                continue;
+            }
 
             // Collect ALL parent record IDs
             Set<Id> parentIds = parentDataMaps.keySet();
-            if (parentIds.isEmpty()) continue;
+            if (parentIds.isEmpty()) {
+                continue;
+            }
 
             // Build child query
             List<String> selectFields = new List<String>();
-            if (!child.fields.contains('Id')) selectFields.add('Id');
+            if (!child.fields.contains('Id')) {
+                selectFields.add('Id');
+            }
             selectFields.addAll(child.fields);
             selectFields.addAll(child.parentFields);
             selectFields.add(child.lookupField);
@@ -610,7 +729,9 @@ public with sharing class DocGenDataRetriever {
                 if (jFields != null) {
                     for (Object jf : jFields) {
                         String jfs = String.valueOf(jf);
-                        if (!selectFields.contains(jfs)) selectFields.add(jfs);
+                        if (!selectFields.contains(jfs)) {
+                            selectFields.add(jfs);
+                        }
                     }
                 }
             }
@@ -627,7 +748,7 @@ public with sharing class DocGenDataRetriever {
             try {
                 childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - V3 child node fields from query config; clauses sanitized; runs with USER_MODE
             } catch (Exception e) {
-                System.debug(LoggingLevel.WARN, 'DocGen: V3 bulk child query error for ' + child.objectApiName + ': ' + e.getMessage());
+                // Bulk child query failed — skip this child relationship
                 continue;
             }
 
@@ -664,7 +785,9 @@ public with sharing class DocGenDataRetriever {
                     if (childIdVal != null) {
                         try {
                             allChildDataMaps.put(Id.valueOf(String.valueOf(childIdVal)), childRec);
-                        } catch (Exception e) { /* skip */ }
+                        } catch (Exception e) {
+                            // Non-ID value in child record — skip for recursion
+                        }
                     }
                 }
             }
@@ -688,19 +811,33 @@ public with sharing class DocGenDataRetriever {
 
         List<String> targetFields = new List<String>();
         List<Object> tfl = (List<Object>) junctionConfig.get('targetFields');
-        if (tfl != null) for (Object f : tfl) targetFields.add(String.valueOf(f));
-        if (targetFields.isEmpty()) return;
-        if (!targetFields.contains('Id')) targetFields.add(0, 'Id');
+        if (tfl != null) {
+            for (Object f : tfl) {
+                targetFields.add(String.valueOf(f));
+            }
+        }
+        if (targetFields.isEmpty()) {
+            return;
+        }
+        if (!targetFields.contains('Id')) {
+            targetFields.add(0, 'Id');
+        }
 
         // Collect target IDs
         Set<Id> targetIds = new Set<Id>();
         for (Map<String, Object> rec : junctionRecords) {
             Object idVal = rec.get(targetIdField);
             if (idVal != null) {
-                try { targetIds.add(Id.valueOf(String.valueOf(idVal))); } catch (Exception e) { /* skip */ }
+                try {
+                    targetIds.add(Id.valueOf(String.valueOf(idVal)));
+                } catch (Exception e) {
+                    // Non-ID value in junction target field — skip this record
+                }
             }
         }
-        if (targetIds.isEmpty()) return;
+        if (targetIds.isEmpty()) {
+            return;
+        }
 
         // Query targets
         String tQuery = 'SELECT ' + String.join(targetFields, ', ') +
@@ -713,19 +850,25 @@ public with sharing class DocGenDataRetriever {
                 targetMap.put(rec.Id, mapSObject(rec));
             }
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: V3 junction target query error: ' + e.getMessage());
+            // Junction target query failed — skip stitching
             return;
         }
 
         // Stitch
         for (Map<String, Object> jRec : junctionRecords) {
             Object idVal = jRec.get(targetIdField);
-            if (idVal == null) continue;
+            if (idVal == null) {
+                continue;
+            }
             try {
                 Id tId = Id.valueOf(String.valueOf(idVal));
                 Map<String, Object> tData = targetMap.get(tId);
-                if (tData != null) jRec.put(targetObject, tData);
-            } catch (Exception e) { /* skip */ }
+                if (tData != null) {
+                    jRec.put(targetObject, tData);
+                }
+            } catch (Exception e) {
+                // Non-ID value in target field — skip this record
+            }
         }
     }
 
@@ -737,7 +880,9 @@ public with sharing class DocGenDataRetriever {
 
         for (String part : rawParts) {
             String trimmed = part.trim();
-            if (String.isBlank(trimmed)) continue;
+            if (String.isBlank(trimmed)) {
+                continue;
+            }
 
             String upper = trimmed.toUpperCase();
             if (trimmed.startsWith('(') && upper.contains('SELECT') && upper.contains('FROM')) {
@@ -976,11 +1121,17 @@ public with sharing class DocGenDataRetriever {
                 if (rec instanceof Map<String, Object>) {
                     Object idVal = ((Map<String, Object>) rec).get('Id');
                     if (idVal != null) {
-                        try { parentIds.add(Id.valueOf(String.valueOf(idVal))); } catch (Exception e) { /* skip */ }
+                        try {
+                            parentIds.add(Id.valueOf(String.valueOf(idVal)));
+                        } catch (Exception e) {
+                            // Non-ID value — skip this child record
+                        }
                     }
                 }
             }
-            if (parentIds.isEmpty()) continue;
+            if (parentIds.isEmpty()) {
+                continue;
+            }
 
             // Query grandchildren
             String gcQuery = 'SELECT ' + grandchildSpec.fieldsOnly +
@@ -995,7 +1146,7 @@ public with sharing class DocGenDataRetriever {
             try {
                 gcResults = Database.query(gcQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - grandchild fields from query config; runs with USER_MODE
             } catch (Exception e) {
-                System.debug(LoggingLevel.WARN, 'DocGen: Grandchild query failed: ' + e.getMessage());
+                // Grandchild query failed — skip this relationship
                 continue;
             }
 
@@ -1011,13 +1162,22 @@ public with sharing class DocGenDataRetriever {
 
             // Stitch into child records
             for (Object rec : childRecords) {
-                if (!(rec instanceof Map<String, Object>)) continue;
+                if (!(rec instanceof Map<String, Object>)) {
+                    continue;
+                }
                 Map<String, Object> childRec = (Map<String, Object>) rec;
                 Object childIdVal = childRec.get('Id');
-                if (childIdVal == null) continue;
+                if (childIdVal == null) {
+                    continue;
+                }
 
                 Id childId;
-                try { childId = Id.valueOf(String.valueOf(childIdVal)); } catch (Exception e) { continue; }
+                try {
+                    childId = Id.valueOf(String.valueOf(childIdVal));
+                } catch (Exception e) {
+                    // Non-ID value — skip stitching for this child record
+                    continue;
+                }
 
                 List<Map<String, Object>> gcList = gcByParent.containsKey(childId)
                     ? gcByParent.get(childId)
@@ -1063,11 +1223,9 @@ public with sharing class DocGenDataRetriever {
                     }
                 }
             }
-            System.debug(LoggingLevel.WARN, 'DocGen: Relationship not found, skipping: ' + fieldName);
             return null;
         }
 
-        System.debug(LoggingLevel.WARN, 'DocGen: Field not found, skipping: ' + fieldName);
         return null;
     }
 
@@ -1095,7 +1253,9 @@ public with sharing class DocGenDataRetriever {
                     if (!parentMap.containsKey('Id')) {
                         try {
                             parentMap.put('Id', ((SObject) value).Id);
-                        } catch (Exception ignored) { }
+                        } catch (Exception ignored) {
+                            // Parent record may not have Id populated — safe to skip
+                        }
                     }
                     data.put(key, parentMap);
                 } else if (value instanceof Address) {
@@ -1114,7 +1274,7 @@ public with sharing class DocGenDataRetriever {
                     data.put(key, value);
                 }
             } catch (Exception e) {
-                System.debug(LoggingLevel.FINE, 'DocGen: Error mapping field: ' + e.getMessage());
+                // Field mapping failed (e.g., blob field access) — skip this field
             }
         }
         return data;

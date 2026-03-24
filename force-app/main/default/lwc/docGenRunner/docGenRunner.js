@@ -6,9 +6,8 @@ import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
 import getChildRecordPdfs from '@salesforce/apex/DocGenController.getChildRecordPdfs';
 import getRecordPdfs from '@salesforce/apex/DocGenController.getRecordPdfs';
-import saveGeneratedDocument from '@salesforce/apex/DocGenController.saveGeneratedDocument';
 import { NavigationMixin } from 'lightning/navigation';
-import { mergePdfs } from './docGenPdfMerger';
+import { downloadBase64 as downloadBase64Util } from 'c/docGenUtils';
 
 export default class DocGenRunner extends NavigationMixin(LightningElement) {
     @api recordId;
@@ -116,7 +115,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     }
 
     @wire(getChildRelationships, { objectApiName: '$objectApiName' })
-    wiredRelationships({ error, data }) {
+    wiredRelationships({ data }) {
         if (data) {
             this.childRelationships = data;
         }
@@ -135,7 +134,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     async loadRecordPdfs() {
         try {
             this.recordPdfOptions = await getRecordPdfs({ recordId: this.recordId });
-        } catch (e) {
+        } catch {
             this.showToast('Error', 'Failed to load record PDFs', 'error');
         }
     }
@@ -307,21 +306,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     }
 
     downloadBase64(base64Data, fileName, mimeType) {
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        downloadBase64Util(base64Data, fileName, mimeType);
     }
 
     showToast(title, message, variant) {

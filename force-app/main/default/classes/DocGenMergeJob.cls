@@ -14,10 +14,18 @@ public with sharing class DocGenMergeJob implements Queueable {
 
     private Id jobId;
 
+    /**
+     * Constructs a merge job for the specified bulk generation job.
+     * @param jobId The DocGen_Job__c record ID containing HTML snippets to merge
+     */
     public DocGenMergeJob(Id jobId) {
         this.jobId = jobId;
     }
 
+    /**
+     * Assembles all HTML snippets into a single merged PDF, saves it, and cleans up.
+     * @param ctx The queueable context provided by the platform
+     */
     public void execute(QueueableContext ctx) {
         try {
             // Read all HTML snippets in order
@@ -79,13 +87,10 @@ public with sharing class DocGenMergeJob implements Queueable {
             }
             delete docsToDelete; // NOPMD ApexCRUDViolation - cleaning up internal temp files
 
-            System.debug('DocGen: Merged PDF created — ' + snippets.size() + ' pages, CV=' + pdfCv.Id);
-
             // Send bell + push notification to the job submitter
             sendCompletionNotification(job, fileName, snippets.size());
 
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: Merge job failed: ' + e.getMessage() + '\n' + e.getStackTraceString());
             update new DocGen_Job__c(Id = jobId, Status__c = 'Completed with Errors');
         }
     }
@@ -99,7 +104,6 @@ public with sharing class DocGenMergeJob implements Queueable {
                 WITH SYSTEM_MODE LIMIT 1
             ];
             if (types.isEmpty()) {
-                System.debug(LoggingLevel.WARN, 'DocGen: CustomNotificationType DocGen_Job_Complete not found. Skipping notification.');
                 return;
             }
 
@@ -111,8 +115,7 @@ public with sharing class DocGenMergeJob implements Queueable {
             notification.send(new Set<String>{ job.CreatedById });
 
         } catch (Exception e) {
-            // Non-fatal — log but don't fail the job
-            System.debug(LoggingLevel.WARN, 'DocGen: Could not send notification: ' + e.getMessage());
+            // Non-fatal — don't fail the job
         }
     }
 }

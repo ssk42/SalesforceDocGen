@@ -6,7 +6,7 @@
 .badge-base {
     display: inline-block;
     font-size: 0.625rem;
-    font-weight: 700;
+    font-weight: var(--slds-g-font-weight-7, 700);
     padding: 1px 6px;
     border-radius: 10px;
     white-space: nowrap;

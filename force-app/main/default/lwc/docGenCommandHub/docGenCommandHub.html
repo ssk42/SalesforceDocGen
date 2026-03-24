@@ -256,6 +256,52 @@
                                     </div>
                                 </section>
 
+                                <!-- Bulk Strategies -->
+                                <section id="bulk-docs" class="content-section">
+                                    <h3 class="section-heading">Bulk Generation Strategies</h3>
+                                    <p>Generate documents for hundreds or thousands of records in one job.</p>
+
+                                    <div class="limit-grid">
+                                        <div class="limit-card info">
+                                            <strong>Batch Size</strong>
+                                            <p>Start with <strong>batch size 1</strong> for complex templates (images, child loops). Increase to 10-50 for simple text-only templates. If jobs fail, reduce the batch size.</p>
+                                        </div>
+                                        <div class="limit-card info">
+                                            <strong>SOQL Filters</strong>
+                                            <p>Use the WHERE clause filter to target specific records. Example: <code>StageName = 'Closed Won' AND CloseDate = THIS_QUARTER</code>.</p>
+                                        </div>
+                                        <div class="limit-card warning">
+                                            <strong>Merge PDFs</strong>
+                                            <p>Check <strong>Merge PDFs</strong> to combine all generated documents into a single file, attached to the Job record. Use <strong>Merge Only</strong> to skip individual files.</p>
+                                        </div>
+                                        <div class="limit-card info">
+                                            <strong>Saved Queries</strong>
+                                            <p>Save frequently used filters per template. Filters from report imports are auto-saved for reuse.</p>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <!-- Sharing & Versions -->
+                                <section id="admin" class="content-section">
+                                    <h3 class="section-heading">Sharing &amp; Template Versions</h3>
+                                    <p>Control who can use templates and manage template history.</p>
+
+                                    <div class="limit-grid">
+                                        <div class="limit-card info">
+                                            <strong>Template Visibility</strong>
+                                            <p>Templates are stored as <strong>DocGen_Template__c</strong> records. Use standard Salesforce sharing rules, profiles, and permission sets to control who can see and use each template.</p>
+                                        </div>
+                                        <div class="limit-card info">
+                                            <strong>Template Versions</strong>
+                                            <p>Each template upload creates a new <strong>ContentVersion</strong>. The most recently uploaded version is always the active one. Previous versions are preserved in Salesforce Files history.</p>
+                                        </div>
+                                        <div class="limit-card warning">
+                                            <strong>Generated Documents</strong>
+                                            <p>Output files are saved as <strong>ContentVersion</strong> records linked to the source record. They follow standard Salesforce file sharing — visible to anyone with access to the record.</p>
+                                        </div>
+                                    </div>
+                                </section>
+
                                 <!-- Limits -->
                                 <section id="limits" class="content-section">
                                     <h3 class="section-heading">Limits & Workarounds</h3>

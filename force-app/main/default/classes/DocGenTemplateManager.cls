@@ -1,5 +1,5 @@
 public with sharing class DocGenTemplateManager {
-    
+
     /**
      * Retrieves the ContentVersion Blob for the latest file attached to the DocGen Template.
      * @param templateId The ID of the DocGen_Template__c record.
@@ -24,8 +24,8 @@ public with sharing class DocGenTemplateManager {
 
         if (!activeVersions.isEmpty()) {
             targetCvId = activeVersions[0].Content_Version_Id__c;
-        } 
-        
+        }
+
         // Fallback: If no active version OR active version has null CV ID (legacy/broken data)
         if (targetCvId == null) {
             List<ContentDocumentLink> links = [
@@ -65,7 +65,7 @@ public with sharing class DocGenTemplateManager {
             WITH USER_MODE
             LIMIT 1
         ];
-        
+
         if (cvs.isEmpty()) {
             throw new AuraHandledException('ContentVersion not found.');
         }

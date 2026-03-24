@@ -77,7 +77,7 @@ export default class DocGenSharing extends LightningElement {
             .then(results => {
                 this.searchResults = results;
             })
-            .catch(_error => {
+            .catch(() => {
             })
             .finally(() => {
                 this.isSearching = false;

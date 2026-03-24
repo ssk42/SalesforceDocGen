@@ -1,30 +1,30 @@
 .admin-workspace {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    color: #111827;
+    color: var(--slds-g-color-neutral-10, #111827);
 }
 
 /* Wizard */
 .wizard-header {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
+    background: var(--slds-g-color-neutral-base-2, #f9fafb);
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    border-radius: var(--slds-g-radius-border-3, 12px);
+    padding: var(--slds-g-spacing-5, 1.5rem);
+    margin-bottom: var(--slds-g-spacing-6, 2rem);
 }
 
 .wizard-content {
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 2rem;
+    background: var(--slds-g-color-neutral-base-1, #ffffff);
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    border-radius: var(--slds-g-radius-border-3, 12px);
+    padding: var(--slds-g-spacing-6, 2rem);
     min-height: 300px;
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .wizard-footer {
-    margin-top: 2rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid #f3f4f6;
+    margin-top: var(--slds-g-spacing-6, 2rem);
+    padding-top: var(--slds-g-spacing-5, 1.5rem);
+    border-top: var(--slds-g-sizing-border-1, 1px) solid #f3f4f6;
 }
 
 /* Modal styling */
@@ -40,7 +40,7 @@
     background: #eff6ff;
     padding: 4px 8px;
     border-radius: 6px;
-    border: 1px solid #bfdbfe;
+    border: var(--slds-g-sizing-border-1, 1px) solid #bfdbfe;
     transition: all 0.2s;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -52,8 +52,8 @@
 
 /* Table container styling */
 .table-container {
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    border-radius: var(--slds-g-radius-border-3, 12px);
     overflow: hidden;
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
