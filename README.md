@@ -351,28 +351,24 @@ QR encoding verified module-by-module against [qrcode-generator](https://www.npm
 
 ---
 
-## Roadmap
+## Community
 
-DocGen is now published through a Salesforce Partner org (Portwood Global Solutions). We are actively working toward listing as a **Salesforce Accelerator** (similar to DLRS and other community-driven tools). A community support page is in progress — stay tuned.
+DocGen is open source, community-driven, and published through [Portwood Global Solutions](https://portwoodglobalsolutions.com). We're working toward listing as a **Salesforce Accelerator** (like DLRS and other community tools).
 
-## Support
-
-For questions, bugs, or feature requests:
-
-- **Email:** hello@portwoodglobalsolutions.com
-- **GitHub Issues:** [github.com/DaveMoudy/SalesforceDocGen/issues](https://github.com/DaveMoudy/SalesforceDocGen/issues)
-
----
+| Channel | What It's For |
+|---------|---------------|
+| [Issues](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/issues) | Bug reports, feature requests, questions |
+| [Discussions](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/discussions) | Ideas, show-and-tell, general conversation |
+| [Community Hub](https://portwoodglobalsolutions.com/DocGenCommunity) | Forum with real-time help and template sharing |
+| [Website](https://portwoodglobalsolutions.com) | Install links, live demo, documentation |
 
 ## Contributing
 
-Open-source under Apache 2.0. Contributions welcome:
+We welcome contributions of all kinds — bug fixes, features, documentation, and template examples. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, code guidelines, and how to submit a PR.
 
-1. Fork the repo
-2. Create a feature branch
-3. Submit a PR with a clear description
+## Security
 
----
+Found a vulnerability? Please report it privately — see [SECURITY.md](SECURITY.md) for details.
 
 ## License
 
