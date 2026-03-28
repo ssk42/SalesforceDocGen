@@ -246,7 +246,7 @@ private class DocGenGiantQueryTest {
             DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
                 job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF'
             );
-            System.enqueueJob(stitchJob);
+            Database.executeBatch(stitchJob, 1);
             Test.stopTest();
 
             // Verify job status updated (may be Completed or Failed depending on template file availability)
