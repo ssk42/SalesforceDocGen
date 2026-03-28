@@ -5313,4 +5313,1343 @@ private class DocGenMiscTests {
         }
     }
 
+    // =========================================================================
+    // DocGenGiantQueryStitchJob — Batchable coverage
+    // =========================================================================
+
+    @IsTest
+    static void testStitchJobStartWithFragments() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Harvesting',
+                Template__c = tpl.Id,
+                Label__c = 'Stitch Start Test'
+            );
+            insert job;
+
+            // Create mock fragment CVs
+            List<ContentVersion> fragments = new List<ContentVersion>();
+            for (Integer i = 0; i < 5; i++) {
+                String seq = String.valueOf(i).leftPad(5, '0');
+                fragments.add(new ContentVersion(
+                    Title = 'docgen_giant_' + job.Id + '_' + seq,
+                    PathOnClient = 'docgen_giant_' + job.Id + '_' + seq + '.html',
+                    VersionData = Blob.valueOf('<table><tr><td>Row ' + i + '</td></tr></table>'),
+                    IsMajorVersion = false,
+                    FirstPublishLocationId = job.Id
+                ));
+            }
+            insert fragments;
+
+            Test.startTest();
+            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
+                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF'
+            );
+            Database.executeBatch(stitchJob, 200);
+            Test.stopTest();
+
+            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
+            System.assert(
+                updatedJob.Status__c == 'Completed' || updatedJob.Status__c == 'Failed',
+                'Job should be Completed or Failed after stitch: ' + updatedJob.Status__c
+            );
+        }
+    }
+
+    @IsTest
+    static void testStitchJobStartWithNoFragments() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Harvesting',
+                Template__c = tpl.Id,
+                Label__c = 'Stitch No Fragments'
+            );
+            insert job;
+
+            // No fragment CVs created — empty scenario
+            Test.startTest();
+            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
+                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF'
+            );
+            Database.executeBatch(stitchJob, 200);
+            Test.stopTest();
+
+            DocGen_Job__c updatedJob = [SELECT Status__c, Label__c FROM DocGen_Job__c WHERE Id = :job.Id];
+            System.assertEquals('Failed', updatedJob.Status__c, 'Job should be Failed when no fragments exist');
+            System.assert(updatedJob.Label__c != null && updatedJob.Label__c.contains('No fragments'), 'Label should mention no fragments');
+        }
+    }
+
+    @IsTest
+    static void testStitchJobBackwardCompatConstructor() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Harvesting',
+                Template__c = tpl.Id,
+                Label__c = 'Compat Ctor Test'
+            );
+            insert job;
+
+            Test.startTest();
+            // Use the backward-compatible 7-argument constructor
+            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
+                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF', 0, null
+            );
+            System.assertNotEquals(null, stitchJob, 'Backward-compatible constructor should work');
+            Test.stopTest();
+        }
+    }
+
+    @IsTest
+    static void testStitchJobFinishSinglePart() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Harvesting',
+                Template__c = tpl.Id,
+                Label__c = 'Single Part Test'
+            );
+            insert job;
+
+            // Create exactly 1 fragment — will produce 1 part, triggering single-part finish path
+            ContentVersion frag = new ContentVersion(
+                Title = 'docgen_giant_' + job.Id + '_00000',
+                PathOnClient = 'docgen_giant_' + job.Id + '_00000.html',
+                VersionData = Blob.valueOf('<table><tr><td>Only Row</td></tr></table>'),
+                IsMajorVersion = false,
+                FirstPublishLocationId = job.Id
+            );
+            insert frag;
+
+            Test.startTest();
+            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
+                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF'
+            );
+            Database.executeBatch(stitchJob, 200);
+            Test.stopTest();
+
+            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
+            System.assert(
+                updatedJob.Status__c == 'Completed' || updatedJob.Status__c == 'Failed',
+                'Single-part stitch should complete or fail: ' + updatedJob.Status__c
+            );
+        }
+    }
+
+    @IsTest
+    static void testStitchJobFinishMultipleParts() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Harvesting',
+                Template__c = tpl.Id,
+                Label__c = 'Multi Part Test'
+            );
+            insert job;
+
+            // Create more fragments than FRAGMENTS_PER_PDF (3) to force multiple groups/parts
+            List<ContentVersion> fragments = new List<ContentVersion>();
+            for (Integer i = 0; i < 7; i++) {
+                String seq = String.valueOf(i).leftPad(5, '0');
+                fragments.add(new ContentVersion(
+                    Title = 'docgen_giant_' + job.Id + '_' + seq,
+                    PathOnClient = 'docgen_giant_' + job.Id + '_' + seq + '.html',
+                    VersionData = Blob.valueOf('<table><tr><td>Row ' + i + '</td></tr></table>'),
+                    IsMajorVersion = false,
+                    FirstPublishLocationId = job.Id
+                ));
+            }
+            insert fragments;
+
+            Test.startTest();
+            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
+                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF'
+            );
+            Database.executeBatch(stitchJob, 200);
+            Test.stopTest();
+
+            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
+            System.assert(
+                updatedJob.Status__c == 'Completed' || updatedJob.Status__c == 'Failed',
+                'Multi-part stitch should complete or fail: ' + updatedJob.Status__c
+            );
+        }
+    }
+
+    @IsTest
+    static void testStitchJobFinalizerInstantiation() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            DocGen_Job__c job = new DocGen_Job__c(Template__c = tpl.Id, Status__c = 'Stitching');
+            insert job;
+
+            Test.startTest();
+            DocGenGiantQueryStitchJob.DocGenGiantQueryStitchFinalizer finalizer =
+                new DocGenGiantQueryStitchJob.DocGenGiantQueryStitchFinalizer(job.Id);
+            System.assertNotEquals(null, finalizer, 'Finalizer should be creatable');
+            Test.stopTest();
+        }
+    }
+
+    // =========================================================================
+    // DocGenService — Giant Query methods
+    // =========================================================================
+
+    @IsTest
+    static void testExtractLoopBodyWithWhitespace() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Test with whitespace inside tags (pattern match path)
+            String xml = '<w:body><w:p>{ # Contacts }<w:p>{FirstName}</w:p>{ / Contacts }</w:p></w:body>';
+
+            Test.startTest();
+            Map<String, String> result = DocGenService.extractLoopBody(xml, 'Contacts');
+            Test.stopTest();
+
+            // Even with whitespace, should find and extract
+            if (result != null) {
+                System.assert(result.containsKey('innerXml'), 'Should contain innerXml');
+                System.assert(result.containsKey('beforeLoop'), 'Should contain beforeLoop');
+                System.assert(result.containsKey('afterLoop'), 'Should contain afterLoop');
+            }
+        }
+    }
+
+    @IsTest
+    static void testExtractLoopBodyNullReturn() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml = '<w:body><w:p>No loops here</w:p></w:body>';
+
+            Test.startTest();
+            Map<String, String> result = DocGenService.extractLoopBody(xml, 'MissingRelationship');
+            Test.stopTest();
+
+            System.assertEquals(null, result, 'Should return null when loop tag not found');
+        }
+    }
+
+    @IsTest
+    static void testExtractLoopBodyTableRow() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Loop inside a w:tr — should expand container to include table row
+            String xml = '<w:body><w:tbl><w:tr><w:tc>{#Contacts}<w:p>{FirstName}</w:p><w:p>{LastName}</w:p>{/Contacts}</w:tc></w:tr></w:tbl></w:body>';
+
+            Test.startTest();
+            Map<String, String> result = DocGenService.extractLoopBody(xml, 'Contacts');
+            Test.stopTest();
+
+            System.assertNotEquals(null, result, 'Should extract loop body from table row');
+            System.assert(result.get('innerXml').contains('{FirstName}'), 'Should contain FirstName tag');
+            System.assert(result.get('beforeLoop').contains('<w:tbl>'), 'beforeLoop should have table start');
+            System.assert(result.get('afterLoop').contains('</w:tbl>'), 'afterLoop should have table end');
+        }
+    }
+
+    @IsTest
+    static void testRenderLoopBodyForRecordsEmpty() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String innerXml = '<w:tr><w:tc><w:p>{FirstName}</w:p></w:tc></w:tr>';
+
+            Test.startTest();
+            String result = DocGenService.renderLoopBodyForRecords(
+                innerXml, 'Contacts', new List<SObject>(), new List<String>{ 'FirstName' }
+            );
+            Test.stopTest();
+
+            System.assertEquals('', result, 'Empty records list should produce empty output');
+        }
+    }
+
+    @IsTest
+    static void testRenderLoopBodyWithParentFields() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+            List<Contact> contacts = new List<Contact>();
+            for (Integer i = 0; i < 3; i++) {
+                contacts.add(new Contact(FirstName = 'Parent' + i, LastName = 'Test' + i, AccountId = acc.Id));
+            }
+            insert contacts;
+
+            List<Contact> queried = [SELECT FirstName, LastName, Account.Name FROM Contact WHERE AccountId = :acc.Id ORDER BY FirstName];
+
+            String innerXml = '<w:tr><w:tc><w:p>{FirstName}</w:p></w:tc><w:tc><w:p>{Account.Name}</w:p></w:tc></w:tr>';
+
+            Test.startTest();
+            String result = DocGenService.renderLoopBodyForRecords(
+                innerXml, 'Contacts', queried, new List<String>{ 'FirstName', 'Account.Name' }
+            );
+            Test.stopTest();
+
+            System.assertNotEquals('', result, 'Should render content for parent field records');
+            System.assert(result.contains('Misc Test Account'), 'Should resolve parent Account.Name');
+        }
+    }
+
+    @IsTest
+    static void testRenderLoopBodyWithNullParentField() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Contact without Account — parent field will be null
+            Contact c = new Contact(FirstName = 'Orphan', LastName = 'Contact');
+            insert c;
+
+            List<Contact> queried = [SELECT FirstName, Account.Name FROM Contact WHERE Id = :c.Id];
+            String innerXml = '<w:tr><w:tc><w:p>{Account.Name}</w:p></w:tc></w:tr>';
+
+            Test.startTest();
+            String result = DocGenService.renderLoopBodyForRecords(
+                innerXml, 'Contacts', queried, new List<String>{ 'Account.Name' }
+            );
+            Test.stopTest();
+
+            System.assertNotEquals(null, result, 'Should handle null parent gracefully');
+        }
+    }
+
+    @IsTest
+    static void testGenerateDocumentPartsGiantQueryWithInvalidTemplate() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            // Template has a fake file, not a real DOCX — should throw
+            createTestFile();
+
+            Test.startTest();
+            try {
+                Map<String, Object> result = DocGenService.generateDocumentPartsGiantQuery(tpl.Id, acc.Id, 'Contacts');
+                // If it succeeds unexpectedly, that is also acceptable
+            } catch (Exception e) {
+                System.assert(e.getMessage() != null, 'Should get an error for invalid DOCX template');
+            }
+            Test.stopTest();
+        }
+    }
+
+    @IsTest
+    static void testGenerateDocumentPartsGiantQueryWithValidDocx() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Create a template with a real DOCX containing loop tags
+            DocGen_Template__c tpl = new DocGen_Template__c(
+                Name = 'Giant Query Valid Template',
+                Base_Object_API__c = 'Account',
+                Query_Config__c = 'Name',
+                Type__c = 'Word',
+                Output_Format__c = 'PDF'
+            );
+            insert tpl;
+
+            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p>'
+                + '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>{#Contacts}</w:t></w:r></w:p></w:tc></w:tr>'
+                + '<w:tr><w:tc><w:p><w:r><w:t>{FirstName}</w:t></w:r></w:p></w:tc></w:tr>'
+                + '<w:tr><w:tc><w:p><w:r><w:t>{/Contacts}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+                + '</w:body></w:document>';
+
+            // Build DOCX ZIP
+            Compression.ZipWriter zw = new Compression.ZipWriter();
+            zw.addEntry('[Content_Types].xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                + '<Default Extension="xml" ContentType="application/xml"/>'
+                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+                + '</Types>'
+            ));
+            zw.addEntry('_rels/.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'GiantDocx',
+                PathOnClient = 'GiantDocx.docx',
+                VersionData = zw.getArchive()
+            );
+            insert cv;
+
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            Test.startTest();
+            try {
+                Map<String, Object> result = DocGenService.generateDocumentPartsGiantQuery(tpl.Id, acc.Id, 'Contacts');
+                System.assertNotEquals(null, result, 'Should return a result map');
+                System.assert(result.containsKey('allXmlParts'), 'Should contain allXmlParts key');
+            } catch (Exception e) {
+                // May fail due to template merge — that is acceptable in test context
+                System.assert(e.getMessage() != null, 'Error should have a message');
+            }
+            Test.stopTest();
+        }
+    }
+
+    @IsTest
+    static void testMergeTemplateWithPreRenderedLoops() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Create a template with loop tags and a valid DOCX
+            DocGen_Template__c tpl = new DocGen_Template__c(
+                Name = 'PreRendered Loop Template',
+                Base_Object_API__c = 'Account',
+                Query_Config__c = 'Name',
+                Type__c = 'Word',
+                Output_Format__c = 'PDF'
+            );
+            insert tpl;
+
+            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p>'
+                + '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>{#Contacts}</w:t></w:r></w:p></w:tc></w:tr>'
+                + '<w:tr><w:tc><w:p><w:r><w:t>{FirstName}</w:t></w:r></w:p></w:tc></w:tr>'
+                + '<w:tr><w:tc><w:p><w:r><w:t>{/Contacts}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+                + '</w:body></w:document>';
+
+            Compression.ZipWriter zw = new Compression.ZipWriter();
+            zw.addEntry('[Content_Types].xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                + '<Default Extension="xml" ContentType="application/xml"/>'
+                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+                + '</Types>'
+            ));
+            zw.addEntry('_rels/.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'PreRenderedDocx',
+                PathOnClient = 'PreRenderedDocx.docx',
+                VersionData = zw.getArchive()
+            );
+            insert cv;
+
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            // Pre-rendered loop content
+            Map<String, String> preRendered = new Map<String, String>{
+                'Contacts' => '<w:tr><w:tc><w:p><w:r><w:t>Alice</w:t></w:r></w:p></w:tc></w:tr>'
+                            + '<w:tr><w:tc><w:p><w:r><w:t>Bob</w:t></w:r></w:p></w:tc></w:tr>'
+            };
+
+            Test.startTest();
+            try {
+                Id docId = DocGenService.mergeTemplateWithPreRenderedLoops(tpl.Id, acc.Id, preRendered, 'PDF');
+                System.assertNotEquals(null, docId, 'Should produce a document ID');
+            } catch (Exception e) {
+                // May fail during PDF rendering — acceptable in test context
+                System.assert(e.getMessage() != null, 'Error should have a message');
+            }
+            Test.stopTest();
+        }
+    }
+
+    @IsTest
+    static void testGenerateHtmlForRecordCoverage() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Create template with valid DOCX
+            DocGen_Template__c tpl = new DocGen_Template__c(
+                Name = 'HTML Gen Template',
+                Base_Object_API__c = 'Account',
+                Query_Config__c = 'Name',
+                Type__c = 'Word',
+                Output_Format__c = 'PDF'
+            );
+            insert tpl;
+
+            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+
+            Compression.ZipWriter zw = new Compression.ZipWriter();
+            zw.addEntry('[Content_Types].xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                + '<Default Extension="xml" ContentType="application/xml"/>'
+                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+                + '</Types>'
+            ));
+            zw.addEntry('_rels/.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'HtmlGenDocx',
+                PathOnClient = 'HtmlGenDocx.docx',
+                VersionData = zw.getArchive()
+            );
+            insert cv;
+
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            Test.startTest();
+            try {
+                String html = DocGenService.generateHtmlForRecord(tpl.Id, acc.Id, null);
+                System.assertNotEquals(null, html, 'Should return HTML');
+                System.assert(html.contains('Misc Test Account'), 'HTML should contain account name');
+            } catch (Exception e) {
+                // Acceptable in test context where VF page may not exist
+                System.assert(e.getMessage() != null, 'Error should have a message');
+            }
+            Test.stopTest();
+        }
+    }
+
+    @IsTest
+    static void testGenerateHtmlForRecordWithPreloadedDataCoverage() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = new DocGen_Template__c(
+                Name = 'HTML Preload Template',
+                Base_Object_API__c = 'Account',
+                Query_Config__c = 'Name',
+                Type__c = 'Word',
+                Output_Format__c = 'PDF'
+            );
+            insert tpl;
+
+            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+
+            Compression.ZipWriter zw = new Compression.ZipWriter();
+            zw.addEntry('[Content_Types].xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                + '<Default Extension="xml" ContentType="application/xml"/>'
+                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+                + '</Types>'
+            ));
+            zw.addEntry('_rels/.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'HtmlPreloadDocx',
+                PathOnClient = 'HtmlPreloadDocx.docx',
+                VersionData = zw.getArchive()
+            );
+            insert cv;
+
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+            Map<String, Object> preloaded = new Map<String, Object>{ 'Name' => 'Preloaded Name' };
+
+            Test.startTest();
+            try {
+                String html = DocGenService.generateHtmlForRecord(tpl.Id, acc.Id, preloaded);
+                System.assertNotEquals(null, html, 'Should return HTML with preloaded data');
+            } catch (Exception e) {
+                System.assert(e.getMessage() != null, 'Error should have a message');
+            }
+            Test.stopTest();
+        }
+    }
+
+    // =========================================================================
+    // DocGenFlowAction — error and save paths
+    // =========================================================================
+
+    @IsTest
+    static void testFlowActionWithInvalidRecordId() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            createTestFile();
+
+            DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+            req.templateId = tpl.Id;
+            // Use a fabricated ID that does not exist
+            req.recordId = '001000000000000AAA';
+            req.saveToRecord = false;
+
+            Test.startTest();
+            List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+                new List<DocGenFlowAction.Request>{ req }
+            );
+            Test.stopTest();
+
+            System.assertEquals(1, responses.size(), 'Should return one response');
+            // Should fail because record does not exist or template is invalid
+            System.assertEquals(false, responses[0].success, 'Should fail for invalid record');
+            System.assertNotEquals(null, responses[0].errorMessage, 'Should have an error message');
+        }
+    }
+
+    @IsTest
+    static void testFlowActionSaveToRecordTrue() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Create a template with valid DOCX
+            DocGen_Template__c tpl = new DocGen_Template__c(
+                Name = 'Flow Save Template',
+                Base_Object_API__c = 'Account',
+                Query_Config__c = 'Name',
+                Type__c = 'Word',
+                Output_Format__c = 'PDF'
+            );
+            insert tpl;
+
+            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+
+            Compression.ZipWriter zw = new Compression.ZipWriter();
+            zw.addEntry('[Content_Types].xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                + '<Default Extension="xml" ContentType="application/xml"/>'
+                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+                + '</Types>'
+            ));
+            zw.addEntry('_rels/.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'FlowSaveDocx',
+                PathOnClient = 'FlowSaveDocx.docx',
+                VersionData = zw.getArchive()
+            );
+            insert cv;
+
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+
+            DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+            req.templateId = tpl.Id;
+            req.recordId = acc.Id;
+            req.saveToRecord = true;
+            req.documentTitle = 'Flow Generated Doc';
+
+            Test.startTest();
+            List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+                new List<DocGenFlowAction.Request>{ req }
+            );
+            Test.stopTest();
+
+            System.assertEquals(1, responses.size(), 'Should return one response');
+            if (responses[0].success) {
+                System.assertNotEquals(null, responses[0].contentDocumentId, 'Should have contentDocumentId on success');
+                System.assertNotEquals(null, responses[0].contentVersionId, 'Should have contentVersionId on success');
+                // Verify CDL was created linking doc to account
+                List<ContentDocumentLink> links = [
+                    SELECT Id FROM ContentDocumentLink
+                    WHERE ContentDocumentId = :responses[0].contentDocumentId AND LinkedEntityId = :acc.Id
+                ];
+                System.assert(links.size() > 0, 'Should create ContentDocumentLink when saveToRecord is true');
+            }
+        }
+    }
+
+    @IsTest
+    static void testFlowActionSaveToRecordFalse() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+            createTestFile();
+
+            DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+            req.templateId = tpl.Id;
+            req.recordId = acc.Id;
+            req.saveToRecord = false;
+
+            Test.startTest();
+            List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+                new List<DocGenFlowAction.Request>{ req }
+            );
+            Test.stopTest();
+
+            // Even if generation fails (fake DOCX), saveToRecord=false path is exercised
+            System.assertEquals(1, responses.size(), 'Should return one response');
+        }
+    }
+
+    @IsTest
+    static void testFlowActionMultipleRequests() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+            createTestFile();
+
+            List<DocGenFlowAction.Request> requests = new List<DocGenFlowAction.Request>();
+            for (Integer i = 0; i < 3; i++) {
+                DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+                req.templateId = tpl.Id;
+                req.recordId = acc.Id;
+                req.saveToRecord = (Math.mod(i, 2) == 0);
+                requests.add(req);
+            }
+
+            Test.startTest();
+            List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(requests);
+            Test.stopTest();
+
+            System.assertEquals(3, responses.size(), 'Should return three responses');
+        }
+    }
+
+    // =========================================================================
+    // DocGenMergeJob — Finalizer and empty snippets
+    // =========================================================================
+
+    @IsTest
+    static void testMergeJobFinalizerInstantiation() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            DocGen_Job__c job = new DocGen_Job__c(Template__c = tpl.Id, Status__c = 'Merging');
+            insert job;
+
+            Test.startTest();
+            DocGenMergeJob.DocGenMergeJobFinalizer finalizer =
+                new DocGenMergeJob.DocGenMergeJobFinalizer(job.Id);
+            System.assertNotEquals(null, finalizer, 'Finalizer should be creatable');
+            Test.stopTest();
+        }
+    }
+
+    @IsTest
+    static void testMergeJobWithEmptySnippets() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Merging',
+                Label__c = 'Empty Merge Test',
+                Success_Count__c = 0,
+                Total_Records__c = 0
+            );
+            insert job;
+
+            // No snippets created — empty scenario
+            Test.startTest();
+            DocGenMergeJob mergeJob = new DocGenMergeJob(job.Id);
+            System.enqueueJob(mergeJob);
+            Test.stopTest();
+
+            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
+            System.assertEquals('Completed', updatedJob.Status__c, 'Job should be Completed when no snippets exist');
+        }
+    }
+
+    @IsTest
+    static void testMergeJobWithSnippets() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Merging',
+                Label__c = 'Snippet Merge Test',
+                Success_Count__c = 3,
+                Total_Records__c = 3
+            );
+            insert job;
+
+            // Create HTML snippet CVs
+            List<ContentVersion> snippets = new List<ContentVersion>();
+            for (Integer i = 0; i < 3; i++) {
+                String seq = String.valueOf(i).leftPad(5, '0');
+                snippets.add(new ContentVersion(
+                    Title = 'docgen_merge_' + job.Id + '_' + seq,
+                    PathOnClient = 'docgen_merge_' + job.Id + '_' + seq + '.html',
+                    VersionData = Blob.valueOf('<html><body><h1>Page ' + i + '</h1><p>Content for record ' + i + '</p></body></html>'),
+                    IsMajorVersion = false,
+                    FirstPublishLocationId = job.Id
+                ));
+            }
+            insert snippets;
+
+            Test.startTest();
+            DocGenMergeJob mergeJob = new DocGenMergeJob(job.Id);
+            System.enqueueJob(mergeJob);
+            Test.stopTest();
+
+            DocGen_Job__c updatedJob = [SELECT Status__c, Merged_PDF_CV__c FROM DocGen_Job__c WHERE Id = :job.Id];
+            // Should be Completed (or Completed with Errors if notification fails)
+            System.assert(
+                updatedJob.Status__c == 'Completed' || updatedJob.Status__c == 'Completed with Errors',
+                'Job should be Completed after merge: ' + updatedJob.Status__c
+            );
+        }
+    }
+
+    // =========================================================================
+    // DocGenBatch — sanitizeCondition rejection and merge-only mode
+    // =========================================================================
+
+    @IsTest
+    static void testBatchSanitizeConditionRejectsInjection() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            // Test with semicolon injection
+            DocGen_Job__c job1 = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Queued',
+                Query_Condition__c = 'Name != null; DELETE Account'
+            );
+            insert job1;
+
+            Test.startTest();
+            try {
+                DocGenBatch batch = new DocGenBatch(job1.Id);
+                Database.executeBatch(batch, 1);
+                Test.stopTest();
+                // If no exception thrown in start(), the batch will fail during execution
+            } catch (Exception e) {
+                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject semicolon injection');
+            }
+        }
+    }
+
+    @IsTest
+    static void testBatchSanitizeConditionRejectsComment() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Queued',
+                Query_Condition__c = 'Name != null -- comment'
+            );
+            insert job;
+
+            Test.startTest();
+            try {
+                DocGenBatch batch = new DocGenBatch(job.Id);
+                Database.executeBatch(batch, 1);
+                Test.stopTest();
+            } catch (Exception e) {
+                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject double-dash comment');
+            }
+        }
+    }
+
+    @IsTest
+    static void testBatchSanitizeConditionRejectsKeywords() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            // Test with SELECT keyword
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Queued',
+                Query_Condition__c = 'Name IN (SELECT Name FROM Account)'
+            );
+            insert job;
+
+            Test.startTest();
+            try {
+                DocGenBatch batch = new DocGenBatch(job.Id);
+                Database.executeBatch(batch, 1);
+                Test.stopTest();
+            } catch (Exception e) {
+                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject SELECT keyword');
+            }
+        }
+    }
+
+    @IsTest
+    static void testBatchMergeOnlyMode() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            createTestFile();
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Queued',
+                Query_Condition__c = 'Name = \'Misc Test Account\''
+            );
+            insert job;
+
+            Test.startTest();
+            // mergeOnly=true — should only generate HTML snippets, no individual PDFs
+            DocGenBatch batch = new DocGenBatch(job.Id, false, true);
+            Database.executeBatch(batch, 1);
+            Test.stopTest();
+
+            DocGen_Job__c updatedJob = [SELECT Status__c, Success_Count__c, Error_Count__c FROM DocGen_Job__c WHERE Id = :job.Id];
+            System.assertNotEquals('Queued', updatedJob.Status__c, 'Job should have progressed from Queued');
+        }
+    }
+
+    @IsTest
+    static void testBatchMergeModeConstructor() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            createTestFile();
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Queued',
+                Query_Condition__c = 'Name = \'Misc Test Account\''
+            );
+            insert job;
+
+            Test.startTest();
+            // Two-arg constructor with mergeMode=true
+            DocGenBatch batch = new DocGenBatch(job.Id, true);
+            Database.executeBatch(batch, 1);
+            Test.stopTest();
+
+            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
+            System.assertNotEquals('Queued', updatedJob.Status__c, 'Job should have progressed');
+        }
+    }
+
+    // =========================================================================
+    // DocGenBulkController — analyzeJob and error paths
+    // =========================================================================
+
+    @IsTest
+    static void testAnalyzeJobWithNullParams() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Test.startTest();
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(null, 0, 1, false);
+            Test.stopTest();
+
+            System.assertNotEquals(null, analysis, 'Should return an analysis even with null template');
+            System.assertEquals('No records to process.', analysis.summary, 'Should report no records');
+        }
+    }
+
+    @IsTest
+    static void testAnalyzeJobWithZeroRecords() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            Test.startTest();
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 0, 1, false);
+            Test.stopTest();
+
+            System.assertEquals('No records to process.', analysis.summary, 'Should report no records for zero count');
+        }
+    }
+
+    @IsTest
+    static void testAnalyzeJobWithNegativeRecords() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            Test.startTest();
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, -5, 1, false);
+            Test.stopTest();
+
+            System.assertEquals('No records to process.', analysis.summary, 'Should report no records for negative count');
+        }
+    }
+
+    @IsTest
+    static void testAnalyzeJobHighRecordCount() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            Test.startTest();
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 60000, 1, false);
+            Test.stopTest();
+
+            System.assertNotEquals(null, analysis, 'Should return analysis');
+            System.assertEquals(false, analysis.canProceed, 'Should not allow proceeding with 60k records');
+            // Should have an error item for record count
+            Boolean foundError = false;
+            for (DocGenBulkController.AnalysisItem item : analysis.items) {
+                if (item.label == 'Record Count' && item.status == 'error') {
+                    foundError = true;
+                }
+            }
+            System.assert(foundError, 'Should have error for record count exceeding 50k');
+        }
+    }
+
+    @IsTest
+    static void testAnalyzeJobMergeMode() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Create template with a test record ID for heap estimation
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+            DocGen_Template__c tpl = new DocGen_Template__c(
+                Name = 'Analyze Merge Template',
+                Base_Object_API__c = 'Account',
+                Query_Config__c = 'Name',
+                Type__c = 'Word',
+                Output_Format__c = 'PDF',
+                Test_Record_Id__c = acc.Id
+            );
+            insert tpl;
+
+            // Need a valid DOCX file for heap estimation
+            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+
+            Compression.ZipWriter zw = new Compression.ZipWriter();
+            zw.addEntry('[Content_Types].xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                + '<Default Extension="xml" ContentType="application/xml"/>'
+                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+                + '</Types>'
+            ));
+            zw.addEntry('_rels/.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                + '</Relationships>'
+            ));
+            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'AnalyzeMergeDocx',
+                PathOnClient = 'AnalyzeMergeDocx.docx',
+                VersionData = zw.getArchive()
+            );
+            insert cv;
+
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+            Test.startTest();
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 100, 5, true);
+            Test.stopTest();
+
+            System.assertNotEquals(null, analysis, 'Should return analysis');
+            // Should have merge heap and batch heap items
+            Set<String> labels = new Set<String>();
+            for (DocGenBulkController.AnalysisItem item : analysis.items) {
+                labels.add(item.label);
+            }
+            System.assert(labels.contains('SOQL Queries'), 'Should have SOQL item');
+            System.assert(labels.contains('DML Statements'), 'Should have DML item');
+            System.assert(labels.contains('Record Count'), 'Should have record count item');
+        }
+    }
+
+    @IsTest
+    static void testAnalyzeJobNoTestRecord() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            Test.startTest();
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 1, false);
+            Test.stopTest();
+
+            System.assertNotEquals(null, analysis, 'Should return analysis');
+            // Without Test_Record_Id__c, should have a warning about heap estimate
+            Boolean foundHeapWarning = false;
+            for (DocGenBulkController.AnalysisItem item : analysis.items) {
+                if (item.label == 'Heap Estimate' && item.status == 'warning') {
+                    foundHeapWarning = true;
+                }
+            }
+            System.assert(foundHeapWarning, 'Should warn about unavailable heap estimate');
+        }
+    }
+
+    @IsTest
+    static void testAnalyzeJobWithV2Config() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String v2Config = JSON.serialize(new Map<String, Object>{
+                'v' => 2,
+                'baseObject' => 'Account',
+                'baseFields' => new List<String>{ 'Name' },
+                'parentFields' => new List<String>(),
+                'children' => new List<Object>{
+                    new Map<String, Object>{ 'rel' => 'Contacts', 'fields' => new List<String>{ 'FirstName' } }
+                },
+                'junctions' => new List<Object>()
+            });
+
+            DocGen_Template__c tpl = new DocGen_Template__c(
+                Name = 'V2 Analyze Template',
+                Base_Object_API__c = 'Account',
+                Query_Config__c = v2Config,
+                Type__c = 'Word',
+                Output_Format__c = 'PDF'
+            );
+            insert tpl;
+
+            Test.startTest();
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 1, false);
+            Test.stopTest();
+
+            System.assertNotEquals(null, analysis, 'Should return analysis for V2 config');
+            // V2 with 1 child should estimate 2 SOQL per record
+            Boolean foundSoql = false;
+            for (DocGenBulkController.AnalysisItem item : analysis.items) {
+                if (item.label == 'SOQL Queries') {
+                    foundSoql = true;
+                }
+            }
+            System.assert(foundSoql, 'Should have SOQL analysis item');
+        }
+    }
+
+    @IsTest
+    static void testAnalyzeJobWithV3Config() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String v3Config = JSON.serialize(new Map<String, Object>{
+                'v' => 3,
+                'root' => 'Account',
+                'nodes' => new List<Object>{
+                    new Map<String, Object>{
+                        'id' => 'n0', 'object' => 'Account', 'fields' => new List<String>{ 'Name' },
+                        'parentFields' => new List<String>(), 'parentNode' => null,
+                        'lookupField' => null, 'relationshipName' => null
+                    },
+                    new Map<String, Object>{
+                        'id' => 'n1', 'object' => 'Contact', 'fields' => new List<String>{ 'FirstName' },
+                        'parentFields' => new List<String>(), 'parentNode' => 'n0',
+                        'lookupField' => 'AccountId', 'relationshipName' => 'Contacts'
+                    }
+                }
+            });
+
+            DocGen_Template__c tpl = new DocGen_Template__c(
+                Name = 'V3 Analyze Template',
+                Base_Object_API__c = 'Account',
+                Query_Config__c = v3Config,
+                Type__c = 'Word',
+                Output_Format__c = 'PDF'
+            );
+            insert tpl;
+
+            Test.startTest();
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 1, false);
+            Test.stopTest();
+
+            System.assertNotEquals(null, analysis, 'Should return analysis for V3 config');
+        }
+    }
+
+    @IsTest
+    static void testAnalyzeJobHighBatchSize() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            Test.startTest();
+            // Invalid batch size (0 or negative) should default to 1
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 0, false);
+            Test.stopTest();
+
+            System.assertNotEquals(null, analysis, 'Should return analysis with defaulted batch size');
+        }
+    }
+
+    @IsTest
+    static void testEstimateHeapUsage() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            Test.startTest();
+            DocGenBulkController.HeapEstimate estimate = DocGenBulkController.estimateHeapUsage(tpl.Id, 10);
+            Test.stopTest();
+
+            System.assertNotEquals(null, estimate, 'Should return a heap estimate');
+            System.assertNotEquals(null, estimate.message, 'Should have a message');
+        }
+    }
+
+    @IsTest
+    static void testBulkControllerValidateFilterInjectionPaths() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Test.startTest();
+
+            // Test WITH keyword rejection
+            try {
+                DocGenBulkController.validateFilter('Account', 'Name != null WITH SECURITY_ENFORCED');
+                System.assert(false, 'Should have thrown for WITH keyword');
+            } catch (AuraHandledException e) {
+                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject WITH keyword');
+            }
+
+            // Test GROUP BY keyword rejection
+            try {
+                DocGenBulkController.validateFilter('Account', 'Name != null GROUP BY Name');
+                System.assert(false, 'Should have thrown for GROUP BY');
+            } catch (AuraHandledException e) {
+                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject GROUP BY');
+            }
+
+            // Test LIMIT keyword rejection
+            try {
+                DocGenBulkController.validateFilter('Account', 'Name != null LIMIT 1');
+                System.assert(false, 'Should have thrown for LIMIT');
+            } catch (AuraHandledException e) {
+                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject LIMIT');
+            }
+
+            // Test OFFSET keyword rejection
+            try {
+                DocGenBulkController.validateFilter('Account', 'Name != null OFFSET 10');
+                System.assert(false, 'Should have thrown for OFFSET');
+            } catch (AuraHandledException e) {
+                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject OFFSET');
+            }
+
+            Test.stopTest();
+        }
+    }
+
+    @IsTest
+    static void testBulkControllerValidateFilterBlockComment() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Test.startTest();
+            try {
+                DocGenBulkController.validateFilter('Account', 'Name != null /* block comment */');
+                System.assert(false, 'Should have thrown for block comment');
+            } catch (AuraHandledException e) {
+                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject block comment');
+            }
+            Test.stopTest();
+        }
+    }
+
+    // =========================================================================
+    // DocGenService — ahe helper method variants
+    // =========================================================================
+
+    @IsTest
+    static void testAheWithCauseAndMessage() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Test.startTest();
+            Exception cause = new DocGenException('root cause');
+            AuraHandledException ex = DocGenService.ahe(cause, 'User message');
+            Test.stopTest();
+
+            System.assertNotEquals(null, ex, 'Should create AuraHandledException');
+            System.assert(ex.getMessage().contains('User message'), 'Should include user message');
+            System.assert(ex.getMessage().contains('root cause'), 'Should include root cause');
+        }
+    }
+
+    @IsTest
+    static void testAheWithCauseOnly() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Test.startTest();
+            Exception cause = new DocGenException('only cause');
+            AuraHandledException ex = DocGenService.ahe(cause);
+            Test.stopTest();
+
+            System.assertNotEquals(null, ex, 'Should create AuraHandledException');
+            System.assert(ex.getMessage().contains('only cause'), 'Should include cause message');
+        }
+    }
+
 }

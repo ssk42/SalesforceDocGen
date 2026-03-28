@@ -3023,4 +3023,870 @@ private class DocGenControllerTests {
             System.assertEquals(false, result.get('valid'), 'Should be invalid for class that does not implement DocGenDataProvider');
         }
     }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — scoutChildCounts
+    // =======================================================================
+
+    @IsTest
+    static void testScoutChildCountsV1Config() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            insert new Contact(FirstName = 'Scout', LastName = 'V1', AccountId = acc.Id);
+
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            tpl.Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)';
+            update tpl;
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.scoutChildCounts(acc.Id, tpl.Id);
+            Test.stopTest();
+
+            System.assertNotEquals(null, result, 'Result should not be null');
+            Map<String, Integer> counts = (Map<String, Integer>) result.get('counts');
+            System.assert(counts.containsKey('Contacts'), 'Should have Contacts count');
+            System.assert(counts.get('Contacts') >= 1, 'Should have at least 1 contact');
+
+            Map<String, Map<String, Object>> childNodes = (Map<String, Map<String, Object>>) result.get('childNodes');
+            System.assert(childNodes.containsKey('Contacts'), 'Should have Contacts child node metadata');
+            Map<String, Object> contactNode = childNodes.get('Contacts');
+            System.assertEquals('Contact', contactNode.get('object'), 'Child object should be Contact');
+        }
+    }
+
+    @IsTest
+    static void testScoutChildCountsV3Config() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            insert new Contact(FirstName = 'Scout', LastName = 'V3', AccountId = acc.Id);
+
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            tpl.Query_Config__c = '{"v":3,"root":"Account","nodes":[' +
+                '{"id":"n0","object":"Account","fields":["Name"],"parentFields":[],"parentNode":null,"lookupField":null,"relationshipName":null},' +
+                '{"id":"n1","object":"Contact","fields":["FirstName","LastName"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Contacts"}' +
+                ']}';
+            update tpl;
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.scoutChildCounts(acc.Id, tpl.Id);
+            Test.stopTest();
+
+            Map<String, Integer> counts = (Map<String, Integer>) result.get('counts');
+            System.assert(counts.containsKey('Contacts'), 'Should have Contacts count for V3');
+
+            Map<String, Map<String, Object>> childNodes = (Map<String, Map<String, Object>>) result.get('childNodes');
+            System.assert(childNodes.containsKey('Contacts'), 'V3 should have Contacts child node');
+        }
+    }
+
+    @IsTest
+    static void testScoutChildCountsNullParams() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Test.startTest();
+            Map<String, Object> result = DocGenController.scoutChildCounts(null, null);
+            Test.stopTest();
+
+            System.assertNotEquals(null, result, 'Should return default empty result');
+            Map<String, Integer> counts = (Map<String, Integer>) result.get('counts');
+            System.assertEquals(0, counts.size(), 'Counts should be empty for null params');
+        }
+    }
+
+    @IsTest
+    static void testScoutChildCountsTemplateNotFound() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            Id fakeId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.scoutChildCounts(acc.Id, fakeId);
+            Test.stopTest();
+
+            Map<String, Integer> counts = (Map<String, Integer>) result.get('counts');
+            System.assertEquals(0, counts.size(), 'Should return empty counts for non-existent template');
+        }
+    }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — getChildRecordPage
+    // =======================================================================
+
+    @IsTest
+    static void testGetChildRecordPageFirstPage() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            insert new List<Contact>{
+                new Contact(FirstName = 'Page', LastName = 'One', AccountId = acc.Id),
+                new Contact(FirstName = 'Page', LastName = 'Two', AccountId = acc.Id)
+            };
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.getChildRecordPage(
+                'Contact', 'AccountId', acc.Id, null, 'Id, FirstName, LastName', 10
+            );
+            Test.stopTest();
+
+            List<Map<String, Object>> records = (List<Map<String, Object>>) result.get('records');
+            System.assert(records.size() >= 2, 'Should return at least 2 contacts');
+            System.assertNotEquals(null, result.get('lastId'), 'lastId should not be null');
+        }
+    }
+
+    @IsTest
+    static void testGetChildRecordPageWithCursor() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            Contact c1 = new Contact(FirstName = 'Cursor', LastName = 'First', AccountId = acc.Id);
+            Contact c2 = new Contact(FirstName = 'Cursor', LastName = 'Second', AccountId = acc.Id);
+            insert new List<Contact>{ c1, c2 };
+
+            // Get first page with pageSize=1
+            Map<String, Object> page1 = DocGenController.getChildRecordPage(
+                'Contact', 'AccountId', acc.Id, null, 'Id, FirstName, LastName', 1
+            );
+            String lastId = (String) page1.get('lastId');
+            System.assertEquals(true, page1.get('hasMore'), 'Should have more records');
+
+            Test.startTest();
+            Map<String, Object> page2 = DocGenController.getChildRecordPage(
+                'Contact', 'AccountId', acc.Id, lastId, 'Id, FirstName, LastName', 1
+            );
+            Test.stopTest();
+
+            List<Map<String, Object>> records = (List<Map<String, Object>>) page2.get('records');
+            System.assert(!records.isEmpty(), 'Second page should have records');
+        }
+    }
+
+    @IsTest
+    static void testGetChildRecordPageInvalidObject() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+
+            Test.startTest();
+            Boolean caughtException = false;
+            try {
+                DocGenController.getChildRecordPage(
+                    'NonExistentObject__xyz', 'AccountId', acc.Id, null, 'Id', 10
+                );
+            } catch (AuraHandledException e) {
+                caughtException = true;
+            }
+            Test.stopTest();
+
+            System.assert(caughtException, 'Should throw for invalid object');
+        }
+    }
+
+    @IsTest
+    static void testGetChildRecordPageNullPageSize() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.getChildRecordPage(
+                'Contact', 'AccountId', acc.Id, null, 'Id, LastName', null
+            );
+            Test.stopTest();
+
+            System.assertNotEquals(null, result, 'Should return result even with null pageSize');
+        }
+    }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — saveDocumentChunk
+    // =======================================================================
+
+    @IsTest
+    static void testSaveDocumentChunkSingleChunk() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            String base64Data = EncodingUtil.base64Encode(Blob.valueOf('Single chunk content'));
+
+            Test.startTest();
+            Id cvId = DocGenController.saveDocumentChunk(
+                acc.Id, 'SingleChunkDoc', base64Data, 0, 1, null, 'docx'
+            );
+            Test.stopTest();
+
+            System.assertNotEquals(null, cvId, 'Should return a ContentVersion ID');
+            ContentVersion cv = [SELECT Title, PathOnClient FROM ContentVersion WHERE Id = :cvId];
+            System.assertEquals('SingleChunkDoc', cv.Title, 'Title should match');
+            System.assert(cv.PathOnClient.endsWith('.docx'), 'Path should end with .docx');
+        }
+    }
+
+    @IsTest
+    static void testSaveDocumentChunkMultiChunk() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            String chunk1 = EncodingUtil.base64Encode(Blob.valueOf('Chunk1'));
+            String chunk2 = EncodingUtil.base64Encode(Blob.valueOf('Chunk2'));
+
+            Test.startTest();
+            // First chunk
+            Id cvId = DocGenController.saveDocumentChunk(
+                acc.Id, 'MultiChunkDoc', chunk1, 0, 2, null, '.pdf'
+            );
+            System.assertNotEquals(null, cvId, 'First chunk should return CV ID');
+
+            // Second (last) chunk
+            Id cvId2 = DocGenController.saveDocumentChunk(
+                acc.Id, 'MultiChunkDoc', chunk2, 1, 2, cvId, '.pdf'
+            );
+            Test.stopTest();
+
+            System.assertEquals(cvId, cvId2, 'Should return the same CV ID for subsequent chunks');
+        }
+    }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — generateDocumentGiantQuery
+    // =======================================================================
+
+    @IsTest
+    static void testGenerateDocumentGiantQueryNullTemplateId() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+
+            Test.startTest();
+            Boolean caughtException = false;
+            try {
+                DocGenController.generateDocumentGiantQuery(null, acc.Id);
+            } catch (AuraHandledException e) {
+                caughtException = true;
+            }
+            Test.stopTest();
+
+            System.assert(caughtException, 'Should throw for null template ID');
+        }
+    }
+
+    @IsTest
+    static void testGenerateDocumentGiantQueryNullRecordId() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            Test.startTest();
+            Boolean caughtException = false;
+            try {
+                DocGenController.generateDocumentGiantQuery(tpl.Id, null);
+            } catch (AuraHandledException e) {
+                caughtException = true;
+            }
+            Test.stopTest();
+
+            System.assert(caughtException, 'Should throw for null record ID');
+        }
+    }
+
+    @IsTest
+    static void testGenerateDocumentGiantQueryV1FallsThrough() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            tpl.Query_Config__c = 'Name, AccountSource';
+            tpl.Output_Format__c = 'PDF';
+            update tpl;
+
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+
+            // Attach a valid DOCX so generation can work
+            Compression.ZipWriter zw = new Compression.ZipWriter();
+            zw.addEntry('[Content_Types].xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                '<Default Extension="xml" ContentType="application/xml"/>' +
+                '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+                '</Types>'
+            ));
+            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+            ));
+            zw.addEntry('word/document.xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>'
+            ));
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'DocxForGiant',
+                PathOnClient = 'DocxForGiant.docx',
+                VersionData = zw.getArchive()
+            );
+            insert cv;
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(
+                LinkedEntityId = tpl.Id,
+                ContentDocumentId = conDocId,
+                ShareType = 'V'
+            );
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.generateDocumentGiantQuery(tpl.Id, acc.Id);
+            Test.stopTest();
+
+            System.assertNotEquals(null, result, 'Result should not be null');
+            System.assertEquals(false, result.get('isGiantQuery'), 'V1 config should not be giant query');
+            System.assertNotEquals(null, result.get('docId'), 'Should have a docId for normal generation');
+        }
+    }
+
+    @IsTest
+    static void testGenerateDocumentGiantQueryV3BelowThreshold() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            tpl.Query_Config__c = '{"v":3,"root":"Account","nodes":[' +
+                '{"id":"n0","object":"Account","fields":["Name"],"parentFields":[],"parentNode":null,"lookupField":null,"relationshipName":null},' +
+                '{"id":"n1","object":"Contact","fields":["FirstName","LastName"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Contacts"}' +
+                ']}';
+            tpl.Output_Format__c = 'PDF';
+            update tpl;
+
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            insert new Contact(FirstName = 'Giant', LastName = 'Test', AccountId = acc.Id);
+
+            // Attach a valid DOCX
+            Compression.ZipWriter zw = new Compression.ZipWriter();
+            zw.addEntry('[Content_Types].xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                '<Default Extension="xml" ContentType="application/xml"/>' +
+                '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+                '</Types>'
+            ));
+            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+            ));
+            zw.addEntry('word/document.xml', Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>'
+            ));
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'DocxForGiantV3',
+                PathOnClient = 'DocxForGiantV3.docx',
+                VersionData = zw.getArchive()
+            );
+            insert cv;
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(
+                LinkedEntityId = tpl.Id,
+                ContentDocumentId = conDocId,
+                ShareType = 'V'
+            );
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.generateDocumentGiantQuery(tpl.Id, acc.Id);
+            Test.stopTest();
+
+            System.assertNotEquals(null, result, 'Result should not be null');
+            System.assertEquals(false, result.get('isGiantQuery'), 'Below-threshold V3 should not be giant query');
+            Map<String, Integer> counts = (Map<String, Integer>) result.get('childCounts');
+            System.assert(counts.containsKey('Contacts'), 'Should include Contacts in childCounts');
+        }
+    }
+
+    @IsTest
+    static void testGenerateDocumentGiantQueryTemplateNotFound() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+            Id fakeId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
+
+            Test.startTest();
+            Boolean caughtException = false;
+            try {
+                DocGenController.generateDocumentGiantQuery(fakeId, acc.Id);
+            } catch (AuraHandledException e) {
+                caughtException = true;
+            }
+            Test.stopTest();
+
+            System.assert(caughtException, 'Should throw for non-existent template');
+        }
+    }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — getGiantQueryJobStatus
+    // =======================================================================
+
+    @IsTest
+    static void testGetGiantQueryJobStatusFound() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Processing',
+                Template__c = tpl.Id,
+                Label__c = 'Test Job',
+                Success_Count__c = 5,
+                Total_Records__c = 10
+            );
+            insert job;
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.getGiantQueryJobStatus(job.Id);
+            Test.stopTest();
+
+            System.assertEquals('Processing', result.get('status'), 'Status should match');
+            System.assertEquals(5.0, result.get('successCount'), 'Success count should match');
+            System.assertEquals(10.0, result.get('totalRecords'), 'Total records should match');
+            System.assertEquals('Test Job', result.get('label'), 'Label should match');
+        }
+    }
+
+    @IsTest
+    static void testGetGiantQueryJobStatusNotFound() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Use a fake valid-format Job ID
+            Id fakeJobId = DocGen_Job__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.getGiantQueryJobStatus(fakeJobId);
+            Test.stopTest();
+
+            System.assertEquals('Not Found', result.get('status'), 'Should return Not Found status');
+        }
+    }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — getGiantQueryFragments / cleanupGiantQueryFragments
+    // =======================================================================
+
+    @IsTest
+    static void testGetGiantQueryFragmentsEmpty() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Complete',
+                Template__c = tpl.Id,
+                Label__c = 'Fragment Test'
+            );
+            insert job;
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.getGiantQueryFragments(job.Id);
+            Test.stopTest();
+
+            List<String> fragmentIds = (List<String>) result.get('fragmentIds');
+            System.assertEquals(0, fragmentIds.size(), 'Should have no fragments');
+            System.assertEquals(0, result.get('fragmentCount'), 'Fragment count should be 0');
+        }
+    }
+
+    @IsTest
+    static void testGetGiantQueryFragmentsWithData() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Complete',
+                Template__c = tpl.Id,
+                Label__c = 'Fragment Data Test'
+            );
+            insert job;
+
+            // Create fragment CVs matching the naming convention
+            String prefix = 'docgen_giant_' + job.Id + '_';
+            ContentVersion cv1 = new ContentVersion(
+                Title = prefix + '001',
+                PathOnClient = prefix + '001.xml',
+                VersionData = Blob.valueOf('<fragment>1</fragment>')
+            );
+            ContentVersion cv2 = new ContentVersion(
+                Title = prefix + '002',
+                PathOnClient = prefix + '002.xml',
+                VersionData = Blob.valueOf('<fragment>2</fragment>')
+            );
+            insert new List<ContentVersion>{ cv1, cv2 };
+
+            Test.startTest();
+            Map<String, Object> result = DocGenController.getGiantQueryFragments(job.Id);
+            Test.stopTest();
+
+            List<String> fragmentIds = (List<String>) result.get('fragmentIds');
+            System.assertEquals(2, fragmentIds.size(), 'Should have 2 fragments');
+            System.assertEquals(2, result.get('fragmentCount'), 'Fragment count should be 2');
+        }
+    }
+
+    @IsTest
+    static void testCleanupGiantQueryFragments() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Complete',
+                Template__c = tpl.Id,
+                Label__c = 'Cleanup Test'
+            );
+            insert job;
+
+            String prefix = 'docgen_giant_' + job.Id + '_';
+            ContentVersion cv1 = new ContentVersion(
+                Title = prefix + '001',
+                PathOnClient = prefix + '001.xml',
+                VersionData = Blob.valueOf('<data>cleanup</data>')
+            );
+            insert cv1;
+
+            Test.startTest();
+            DocGenController.cleanupGiantQueryFragments(job.Id);
+            Test.stopTest();
+
+            // Verify the fragment was deleted
+            List<ContentVersion> remaining = [
+                SELECT Id FROM ContentVersion WHERE Title LIKE :(prefix + '%')
+            ];
+            System.assertEquals(0, remaining.size(), 'Fragments should be deleted after cleanup');
+        }
+    }
+
+    @IsTest
+    static void testCleanupGiantQueryFragmentsNoFragments() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Complete',
+                Template__c = tpl.Id,
+                Label__c = 'No Fragments'
+            );
+            insert job;
+
+            Test.startTest();
+            // Should not throw even when there are no fragments to clean up
+            DocGenController.cleanupGiantQueryFragments(job.Id);
+            Test.stopTest();
+
+            System.assert(true, 'Should complete without error');
+        }
+    }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — generateDocumentPartsGiantQuery
+    // =======================================================================
+
+    @IsTest
+    static void testGenerateDocumentPartsGiantQueryError() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Id fakeTemplateId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+
+            Test.startTest();
+            Boolean caughtException = false;
+            try {
+                DocGenController.generateDocumentPartsGiantQuery(fakeTemplateId, acc.Id, 'Contacts');
+            } catch (AuraHandledException e) {
+                caughtException = true;
+            }
+            Test.stopTest();
+
+            System.assert(caughtException, 'Should throw AuraHandledException for invalid template');
+        }
+    }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — exportTemplate
+    // =======================================================================
+
+    @IsTest
+    static void testExportTemplateSuccess() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            // Create a version with a file so export includes the file
+            ContentVersion cv = new ContentVersion(
+                Title = 'ExportTestFile',
+                PathOnClient = 'ExportTestFile.docx',
+                VersionData = Blob.valueOf('Export file content')
+            );
+            insert cv;
+            cv = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id];
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(
+                LinkedEntityId = tpl.Id,
+                ContentDocumentId = conDocId,
+                ShareType = 'V'
+            );
+
+            DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+                Template__c = tpl.Id,
+                Is_Active__c = true,
+                Content_Version_Id__c = cv.Id,
+                Type__c = 'Word',
+                Base_Object_API__c = 'Account',
+                Category__c = 'Test',
+                Query_Config__c = 'Name'
+            );
+            insert ver;
+
+            Test.startTest();
+            String jsonResult = DocGenController.exportTemplate(tpl.Id);
+            Test.stopTest();
+
+            System.assertNotEquals(null, jsonResult, 'Export result should not be null');
+            Map<String, Object> bundle = (Map<String, Object>) JSON.deserializeUntyped(jsonResult);
+            System.assertEquals('1', bundle.get('docgenExportVersion'), 'Export version should be 1');
+            System.assert(bundle.containsKey('template'), 'Should contain template metadata');
+            System.assert(bundle.containsKey('templateFile'), 'Should contain template file');
+
+            Map<String, Object> tmplData = (Map<String, Object>) bundle.get('template');
+            System.assertEquals('Controller Test Template', tmplData.get('Name'), 'Template name should match');
+        }
+    }
+
+    @IsTest
+    static void testExportTemplateNoVersion() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            Test.startTest();
+            String jsonResult = DocGenController.exportTemplate(tpl.Id);
+            Test.stopTest();
+
+            System.assertNotEquals(null, jsonResult, 'Export should work without versions');
+            Map<String, Object> bundle = (Map<String, Object>) JSON.deserializeUntyped(jsonResult);
+            System.assert(bundle.containsKey('template'), 'Should contain template metadata');
+            System.assert(!bundle.containsKey('templateFile'), 'Should not contain templateFile without version');
+        }
+    }
+
+    @IsTest
+    static void testExportTemplateNotFound() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Id fakeId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
+
+            Test.startTest();
+            Boolean caughtException = false;
+            try {
+                DocGenController.exportTemplate(fakeId);
+            } catch (AuraHandledException e) {
+                caughtException = true;
+            }
+            Test.stopTest();
+
+            System.assert(caughtException, 'Should throw for non-existent template');
+        }
+    }
+
+    @IsTest
+    static void testExportTemplateWithSavedQueries() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            // Create saved queries
+            insert new List<DocGen_Saved_Query__c>{
+                new DocGen_Saved_Query__c(
+                    DocGen_Template__c = tpl.Id,
+                    Name = 'Test Query 1',
+                    Query_Condition__c = 'Industry = \'Technology\'',
+                    Description__c = 'Tech filter'
+                ),
+                new DocGen_Saved_Query__c(
+                    DocGen_Template__c = tpl.Id,
+                    Name = 'Test Query 2',
+                    Query_Condition__c = 'AnnualRevenue > 1000000',
+                    Description__c = 'Revenue filter'
+                )
+            };
+
+            Test.startTest();
+            String jsonResult = DocGenController.exportTemplate(tpl.Id);
+            Test.stopTest();
+
+            Map<String, Object> bundle = (Map<String, Object>) JSON.deserializeUntyped(jsonResult);
+            List<Object> savedQueries = (List<Object>) bundle.get('savedQueries');
+            System.assertNotEquals(null, savedQueries, 'Should contain savedQueries');
+            System.assertEquals(2, savedQueries.size(), 'Should have 2 saved queries');
+        }
+    }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — importTemplate
+    // =======================================================================
+
+    @IsTest
+    static void testImportTemplateSuccess() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Map<String, Object> bundle = new Map<String, Object>();
+            bundle.put('docgenExportVersion', '1');
+            bundle.put('exportDate', String.valueOf(Date.today()));
+
+            Map<String, Object> tmplData = new Map<String, Object>();
+            tmplData.put('Name', 'Imported Template');
+            tmplData.put('Base_Object_API__c', 'Account');
+            tmplData.put('Type__c', 'Word');
+            tmplData.put('Output_Format__c', 'PDF');
+            tmplData.put('Category__c', 'Import Test');
+            tmplData.put('Description__c', 'Imported via test');
+            tmplData.put('Query_Config__c', 'Name, Industry');
+            tmplData.put('Document_Title_Format__c', '{Name}_Import');
+            tmplData.put('Is_Default__c', false);
+            bundle.put('template', tmplData);
+
+            Test.startTest();
+            Id newTemplateId = DocGenController.importTemplate(JSON.serialize(bundle));
+            Test.stopTest();
+
+            System.assertNotEquals(null, newTemplateId, 'Should return a new template ID');
+            DocGen_Template__c imported = [
+                SELECT Name, Base_Object_API__c, Type__c, Category__c, Query_Config__c
+                FROM DocGen_Template__c WHERE Id = :newTemplateId
+            ];
+            System.assertEquals('Imported Template', imported.Name, 'Name should match');
+            System.assertEquals('Account', imported.Base_Object_API__c, 'Base object should match');
+            System.assertEquals('Import Test', imported.Category__c, 'Category should match');
+
+            // Verify version was created
+            List<DocGen_Template_Version__c> versions = [
+                SELECT Is_Active__c FROM DocGen_Template_Version__c WHERE Template__c = :newTemplateId
+            ];
+            System.assertEquals(1, versions.size(), 'Should have 1 version');
+            System.assertEquals(true, versions[0].Is_Active__c, 'Version should be active');
+        }
+    }
+
+    @IsTest
+    static void testImportTemplateWithFileAndQueries() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Map<String, Object> bundle = new Map<String, Object>();
+            bundle.put('docgenExportVersion', '1');
+
+            Map<String, Object> tmplData = new Map<String, Object>();
+            tmplData.put('Name', 'Import With File');
+            tmplData.put('Base_Object_API__c', 'Contact');
+            tmplData.put('Type__c', 'Word');
+            tmplData.put('Query_Config__c', 'FirstName, LastName');
+            tmplData.put('Is_Default__c', false);
+            bundle.put('template', tmplData);
+
+            // Include a template file
+            Map<String, Object> fileData = new Map<String, Object>();
+            fileData.put('fileName', 'ImportedDoc');
+            fileData.put('fileExtension', 'docx');
+            fileData.put('base64', EncodingUtil.base64Encode(Blob.valueOf('Fake DOCX content')));
+            bundle.put('templateFile', fileData);
+
+            // Include saved queries
+            List<Map<String, String>> queries = new List<Map<String, String>>();
+            queries.add(new Map<String, String>{
+                'Name' => 'Imported Query',
+                'Query_Condition__c' => 'LastName = \'Smith\'',
+                'Description__c' => 'Filter Smiths'
+            });
+            bundle.put('savedQueries', queries);
+
+            Test.startTest();
+            Id newTemplateId = DocGenController.importTemplate(JSON.serialize(bundle));
+            Test.stopTest();
+
+            System.assertNotEquals(null, newTemplateId, 'Should return a new template ID');
+
+            // Verify file was attached
+            List<ContentDocumentLink> links = [
+                SELECT ContentDocumentId FROM ContentDocumentLink
+                WHERE LinkedEntityId = :newTemplateId
+            ];
+            System.assert(!links.isEmpty(), 'Should have at least one file linked');
+
+            // Verify saved query was created
+            List<DocGen_Saved_Query__c> savedQueries = [
+                SELECT Name FROM DocGen_Saved_Query__c WHERE DocGen_Template__c = :newTemplateId
+            ];
+            System.assertEquals(1, savedQueries.size(), 'Should have 1 saved query');
+            System.assertEquals('Imported Query', savedQueries[0].Name, 'Query name should match');
+        }
+    }
+
+    @IsTest
+    static void testImportTemplateMissingTemplateData() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Bundle without 'template' key
+            Map<String, Object> bundle = new Map<String, Object>();
+            bundle.put('docgenExportVersion', '1');
+
+            Test.startTest();
+            Boolean caughtException = false;
+            try {
+                DocGenController.importTemplate(JSON.serialize(bundle));
+            } catch (AuraHandledException e) {
+                caughtException = true;
+            }
+            Test.stopTest();
+
+            System.assert(caughtException, 'Should throw for missing template data');
+        }
+    }
+
+    @IsTest
+    static void testImportTemplateInvalidJson() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Test.startTest();
+            Boolean caughtException = false;
+            try {
+                DocGenController.importTemplate('not valid json');
+            } catch (AuraHandledException e) {
+                caughtException = true;
+            }
+            Test.stopTest();
+
+            System.assert(caughtException, 'Should throw for invalid JSON');
+        }
+    }
+
+    // =======================================================================
+    // NEW COVERAGE TESTS — processAndReturnDocumentWithImages
+    // =======================================================================
+
+    @IsTest
+    static void testProcessAndReturnDocumentWithImagesError() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Id fakeTemplateId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Controller Test Account' LIMIT 1];
+
+            Test.startTest();
+            Boolean caughtException = false;
+            try {
+                DocGenController.processAndReturnDocumentWithImages(fakeTemplateId, acc.Id, new Map<String, String>());
+            } catch (AuraHandledException e) {
+                caughtException = true;
+            }
+            Test.stopTest();
+
+            System.assert(caughtException, 'Should throw AuraHandledException for invalid template');
+        }
+    }
 }
