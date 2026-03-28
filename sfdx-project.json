@@ -1,11 +1,11 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.2.0 — Hello AppExchange",
-      "versionNumber": "1.2.0.NEXT",
+      "versionName": "1.1.0 — Giant Query",
+      "versionNumber": "1.1.0.NEXT",
       "path": "force-app",
       "default": true,
-      "package": "Portwood DocGen",
+      "package": "Portwood DocGen Managed",
       "versionDescription": "Free, native document generation for Salesforce. Create PDF and DOCX documents from any record with merge tags, unlimited-depth relationships, images, and rich text. Visual query builder, report import, bulk generation, Flow actions, zero-heap PDF rendering, and self-contained E2E testing. No external dependencies."
     }
   ],
@@ -14,27 +14,8 @@
   "sfdcLoginUrl": "https://login.salesforce.com",
   "sourceApiVersion": "66.0",
   "packageAliases": {
-    "Portwood Global Document Generation": "0Hoal0000003TtVCAU",
-    "Portwood Global Document Generation@1.0.0-1": "04tal000006P9HZAA0",
+    "Portwood DocGen Managed": "0Hoal0000003d9hCAA",
     "Portwood DocGen": "0Hoal0000003TwjCAE",
-    "Portwood DocGen@1.0.0-1": "04tal000006P9MPAA0",
-    "Portwood DocGen@1.0.0-2": "04tal000006P9PdAAK",
-    "Portwood DocGen@1.0.1-1": "04tal000006P9W5AAK",
-    "Portwood DocGen@1.0.2-1": "04tal000006P9r3AAC",
-    "Portwood DocGen@1.0.3-1": "04tal000006P9sfAAC",
-    "Portwood DocGen@1.0.4-1": "04tal000006P9z7AAC",
-    "Portwood DocGen@1.0.5-1": "04tal000006PA7BAAW",
-    "Portwood DocGen@1.0.6-1": "04tal000006PANJAA4",
-    "Portwood DocGen@1.0.7-1": "04tal000006PAOvAAO",
-    "Portwood DocGen@1.0.8-1": "04tal000006PB01AAG",
-    "Portwood DocGen@1.0.9-1": "04tal000006PBrFAAW",
-    "Portwood DocGen@1.1.0-1": "04tal000006PCFRAA4",
-    "Portwood DocGen@1.1.1-1": "04tal000006PCTxAAO",
-    "Portwood DocGen@1.1.2-1": "04tal000006PCVZAA4",
-    "Portwood DocGen@1.1.3-1": "04tal000006PClhAAG",
-    "Portwood DocGen@1.1.4-1": "04tal000006PDOPAA4",
-    "Portwood DocGen@1.1.5-1": "04tal000006PDjNAAW",
-    "Portwood DocGen@1.1.6-1": "04tal000006PDufAAG",
-    "Portwood DocGen@1.1.7-1": "04tal000006PDzVAAW"
+    "Portwood DocGen Managed@1.0.0-1": "04tal000006PEPJAA4"
   }
 }

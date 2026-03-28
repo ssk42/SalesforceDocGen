@@ -155,4 +155,12 @@
         <apexPage>DocGenLanding</apexPage>
         <enabled>true</enabled>
     </pageAccesses>
+    <pageAccesses>
+        <apexPage>DocGenTerms</apexPage>
+        <enabled>true</enabled>
+    </pageAccesses>
+    <pageAccesses>
+        <apexPage>DocGenPrivacy</apexPage>
+        <enabled>true</enabled>
+    </pageAccesses>
 </PermissionSet>

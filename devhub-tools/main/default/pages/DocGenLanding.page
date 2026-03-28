@@ -647,9 +647,11 @@
             <a href="https://github.com/Portwood-Global-Solutions/Portwood-DocGen">GitHub</a>
             <a href="mailto:hello@portwoodglobalsolutions.com">Support</a>
             <a href="https://github.com/Portwood-Global-Solutions/Portwood-DocGen/issues">Report a Bug</a>
+            <a href="/DocGenTerms">Terms of Service</a>
+            <a href="/DocGenPrivacy">Privacy Policy</a>
         </div>
         <p>Built by <a href="https://portwoodglobalsolutions.com">Portwood Global Solutions</a></p>
-        <p style="margin-top: 0.5rem; font-size: 0.8rem;">Namespace: portwoodglobal &bull; Apache 2.0 License &bull; Working toward Salesforce Accelerator listing</p>
+        <p style="margin-top: 0.5rem; font-size: 0.8rem;">Namespace: portwoodglobal &bull; Apache 2.0 License</p>
     </footer>
 
     <script>
