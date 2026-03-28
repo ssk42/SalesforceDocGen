@@ -3786,6 +3786,7 @@ private class DocGenControllerTests {
             tmplData.put('Name', 'Import With File');
             tmplData.put('Base_Object_API__c', 'Contact');
             tmplData.put('Type__c', 'Word');
+            tmplData.put('Output_Format__c', 'PDF');
             tmplData.put('Query_Config__c', 'FirstName, LastName');
             tmplData.put('Is_Default__c', false);
             bundle.put('template', tmplData);
