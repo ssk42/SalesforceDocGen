@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.8.0 — "Giant Query 28K+ & Custom Object Fix" (Portwood DocGen Managed)
+
+Giant Query PDF now scales to 28,000+ rows. Fixed Queueable chain depth limit and reduced HTML size.
+
+- **fix: Giant Query single-pass assembly** — Assembler now loads all HTML fragments in one Queueable execution instead of chaining. Eliminates the 5-deep Queueable chain limit that caused "Maximum stack depth" on large datasets.
+- **fix: Drop per-cell CSS classes** — Removed `class="c1"` from every `<td>` in batch HTML output, saving ~2.5MB on 28K rows. Column formatting now uses `td:nth-child(N)` CSS selectors.
+- **fix: Giant Query parent merge tags** — Fixed parent field resolution that silently failed when child loop fields (e.g., `Product2.Name`) were included in the parent SOQL query. Now validates dot-notation fields have a valid relationship on the base object.
+- **fix: Multi-part PDF rendering** — When row count exceeds 2,000, renders separate PDFs per chunk for client-side merge. Prevents `Blob.toPdf()` stack overflow on very large documents.
+- **Tested**: 28,000 PricebookEntries, 6 columns, ~3.2MB HTML → 8MB PDF.
+- **Ancestor Chain** — v1.8.0 → v1.7.0 → v1.6.0. Seamless upgrades.
+
 ## v1.7.0 — "Custom Object Query Builder Fix" (Portwood DocGen Managed)
 
 Fixed query builder label processing that broke custom objects with `__c` suffix. The label cleanup logic was extracting the API name from the display label and pluralizing it (e.g., `Record_Consolidation__c` → `Record_Consolidation__cs`), causing invalid object references at generation time.

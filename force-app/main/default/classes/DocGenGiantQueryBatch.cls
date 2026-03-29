@@ -184,7 +184,7 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
                     }
                 }
 
-                row += '<td class="c' + colNum + '">' + txt + '</td>';
+                row += '<td>' + txt + '</td>';
             }
             result += row + '</tr>';
         }
@@ -258,7 +258,7 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
             }
 
             if (!styles.isEmpty()) {
-                css += '.c' + colNum + '{' + String.join(styles, ';') + '} ';
+                css += 'td:nth-child(' + colNum + '){' + String.join(styles, ';') + '} ';
             }
         }
         return css;
