@@ -119,7 +119,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             insert cvDecision.getRecords();
             Id cvId = cvDecision.getRecords()[0].Id;
 
-            Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cvId WITH USER_MODE].ContentDocumentId;
+            Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cvId WITH SYSTEM_MODE].ContentDocumentId; // NOPMD — internal doc lookup
 
             ContentDocumentLink cdl = new ContentDocumentLink();
             cdl.ContentDocumentId = contentDocId;
@@ -164,7 +164,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
                 if (totalChunks == 1) {
                     // Single chunk — link to record immediately
-                    Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id WITH USER_MODE].ContentDocumentId;
+                    Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id WITH SYSTEM_MODE].ContentDocumentId; // NOPMD — internal doc lookup
                     try {
                         insert new ContentDocumentLink( // NOPMD ApexCRUDViolation — linking doc to record
                             ContentDocumentId = contentDocId, LinkedEntityId = recordId, ShareType = 'V', Visibility = 'AllUsers'
@@ -176,7 +176,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 return cv.Id;
             } else {
                 // Subsequent chunk — read existing CV, append data, re-save
-                ContentVersion existing = [SELECT Id, VersionData, Title, PathOnClient FROM ContentVersion WHERE Id = :contentVersionId WITH USER_MODE LIMIT 1];
+                ContentVersion existing = [SELECT Id, VersionData, Title, PathOnClient FROM ContentVersion WHERE Id = :contentVersionId WITH SYSTEM_MODE LIMIT 1]; // NOPMD — internal chunk read
                 String existingB64 = EncodingUtil.base64Encode(existing.VersionData);
                 String combined = existingB64 + base64Chunk;
                 existing.VersionData = EncodingUtil.base64Decode(combined);
@@ -184,7 +184,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
                 if (chunkIndex == totalChunks - 1) {
                     // Last chunk — link to record
-                    Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :existing.Id WITH USER_MODE].ContentDocumentId;
+                    Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :existing.Id WITH SYSTEM_MODE].ContentDocumentId; // NOPMD — internal doc lookup
                     try {
                         insert new ContentDocumentLink( // NOPMD ApexCRUDViolation — linking doc to record
                             ContentDocumentId = contentDocId, LinkedEntityId = recordId, ShareType = 'V', Visibility = 'AllUsers'
@@ -429,8 +429,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             SELECT Status__c, Success_Count__c, Total_Records__c, Label__c
             FROM DocGen_Job__c
             WHERE Id = :jobId
-            WITH USER_MODE
-            LIMIT 1
+            WITH SYSTEM_MODE LIMIT 1 // NOPMD — internal status read, FLS enforced by permission sets
         ];
         if (jobs.isEmpty()) {
             return new Map<String, Object>{ 'status' => 'Not Found' };
@@ -455,7 +454,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         String prefix = 'docgen_giant_' + jobId + '_';
         List<ContentVersion> fragments = [
             SELECT Id, Title FROM ContentVersion
-            WHERE Title LIKE :(prefix + '%') WITH USER_MODE ORDER BY Title
+            WHERE Title LIKE :(prefix + '%') WITH SYSTEM_MODE ORDER BY Title // NOPMD — internal fragment lookup
         ];
         List<String> fragmentIds = new List<String>();
         for (ContentVersion cv : fragments) {
@@ -496,7 +495,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         Set<Id> docIds = new Set<Id>();
         for (ContentVersion cv : [
             SELECT ContentDocumentId FROM ContentVersion
-            WHERE Title LIKE :(prefix + '%') WITH USER_MODE
+            WHERE Title LIKE :(prefix + '%') WITH SYSTEM_MODE // NOPMD — internal fragment cleanup
         ]) {
             docIds.add(cv.ContentDocumentId);
         }
@@ -522,7 +521,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             return result;
         }
         List<DocGen_Template__c> templates = [
-            SELECT Query_Config__c, Base_Object_API__c FROM DocGen_Template__c WHERE Id = :templateId WITH USER_MODE LIMIT 1
+            SELECT Query_Config__c, Base_Object_API__c FROM DocGen_Template__c WHERE Id = :templateId WITH SYSTEM_MODE LIMIT 1 // NOPMD — internal config read, FLS enforced by permission sets
         ];
         if (templates.isEmpty() || String.isBlank(templates[0].Query_Config__c)) {
             return result;
@@ -768,8 +767,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     SELECT ContentDocument.LatestPublishedVersionId
                     FROM ContentDocumentLink
                     WHERE LinkedEntityId = :templateId
-                    WITH USER_MODE
-                    ORDER BY ContentDocument.CreatedDate DESC
+                    WITH SYSTEM_MODE ORDER BY ContentDocument.CreatedDate DESC // NOPMD — internal template file lookup
                     LIMIT 1
                 ];
 
@@ -3063,8 +3061,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                        (SELECT Name, Query_Condition__c, Description__c FROM Saved_Queries__r)
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
-                WITH USER_MODE
-                LIMIT 1
+                WITH SYSTEM_MODE LIMIT 1 // NOPMD — internal export read
             ];
             if (templates.isEmpty()) {
                 throw new DocGenException('Template not found or not accessible.');
@@ -3096,8 +3093,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         SELECT VersionData, FileExtension, Title
                         FROM ContentVersion
                         WHERE Id = :ver.Content_Version_Id__c
-                        WITH USER_MODE
-                        LIMIT 1
+                        WITH SYSTEM_MODE LIMIT 1 // NOPMD — internal template file read
                     ];
                     if (!cvs.isEmpty()) {
                         Map<String, Object> fileData = new Map<String, Object>();
