@@ -601,7 +601,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             );
             insert job; // NOPMD ApexCRUDViolation — package-internal
 
-            // Launch batch — shell PDF + table prop extraction happens in start() with fresh heap
+            // Ensure relationshipName is in the config (V1 scout doesn't include it)
+            childNodeConfig.put('relationshipName', giantRelationship);
+
+            // Launch batch
             DocGenGiantQueryBatch batch = new DocGenGiantQueryBatch(
                 job.Id, templateId, recordId, childNodeConfig,
                 loopParts.get('innerXml'), 'PDF'

@@ -90,7 +90,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
     }
 
     /**
-     * Final pass: wraps accumulated HTML rows in a complete document and renders PDF.
+     * Final pass: wraps accumulated rows in a complete document and renders PDF.
      */
     private void renderFinalPdf(String allRows, Id accumDocId) {
         // Clean up the accumulation CV
@@ -103,17 +103,111 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             return;
         }
 
-        // Build simple HTML document with the accumulated rows
-        String html = '<html><head><style>' +
-            '@page { size: letter; margin: 0.75in; }' +
-            'body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; margin: 0; }' +
-            'table { width: 100%; border-collapse: collapse; }' +
-            'td, th { border: 0.5pt solid #999; padding: 4px 6px; text-align: left; }' +
-            'tr { page-break-inside: avoid; }' +
-            '</style></head><body>' +
-            '<table>' + allRows + '</table>' +
-            '</body></html>';
-        allRows = null;
+        // Load pre-baked HTML template (created at template save time — zero conversion overhead)
+        List<DocGen_Template_Version__c> vers = [
+            SELECT Id FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = true
+            WITH SYSTEM_MODE LIMIT 1
+        ];
+        String html = null;
+        if (!vers.isEmpty()) {
+            String htmlTitle = 'docgen_tmpl_html_' + vers[0].Id;
+            List<ContentVersion> htmlCvs = [
+                SELECT VersionData FROM ContentVersion
+                WHERE Title = :htmlTitle WITH SYSTEM_MODE LIMIT 1
+            ];
+            if (!htmlCvs.isEmpty()) {
+                html = htmlCvs[0].VersionData.toString();
+            }
+        }
+
+        if (html != null) {
+            // Inject td styling into the existing <style> block
+            if (html.contains('</style>')) {
+                html = html.replace('</style>',
+                    'td { border: 0.5pt solid #ccc; padding: 3px 5px; } tr { page-break-inside: avoid; } </style>');
+            }
+
+            // Replace the loop ROW (not the whole table) — preserve the header row
+            String openTag = '{#' + giantRelationshipName + '}';
+            if (html.contains(openTag)) {
+                Integer openIdx = html.indexOf(openTag);
+                // Find the <tr> that contains the loop tag — replace from there to </table>
+                Integer loopTrStart = html.lastIndexOf('<tr', openIdx);
+                Integer tableEnd = html.indexOf('</table>', openIdx);
+                if (loopTrStart != -1 && tableEnd != -1) {
+                    String before = html.substring(0, loopTrStart);
+                    String after = html.substring(tableEnd); // keeps </table> and everything after
+                    html = null;
+                    html = before + allRows + after;
+                    allRows = null;
+                }
+            } else {
+                Integer bodyEnd = html.lastIndexOf('</body>');
+                String before = html.substring(0, bodyEnd);
+                String after = html.substring(bodyEnd);
+                html = null;
+                html = before + '<table style="width:100%;border-collapse:collapse;">' + allRows + '</table>' + after;
+                allRows = null;
+            }
+
+            // Resolve parent merge tags — query the record and replace {Field} placeholders
+            try {
+                List<DocGen_Template__c> tpls = [
+                    SELECT Base_Object_API__c, Query_Config__c FROM DocGen_Template__c
+                    WHERE Id = :templateId WITH SYSTEM_MODE LIMIT 1
+                ];
+                if (!tpls.isEmpty()) {
+                    String baseObj = tpls[0].Base_Object_API__c;
+                    // Get all fields referenced in the HTML as {FieldName}
+                    Set<String> fieldNames = new Set<String>{'Name'};
+                    Pattern p = Pattern.compile('\\{(\\w[\\w.]*)\\}');
+                    Matcher m = p.matcher(html);
+                    while (m.find()) { fieldNames.add(m.group(1)); }
+                    // Query the record
+                    List<String> validFields = new List<String>();
+                    Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get(baseObj)?.getDescribe()?.fields?.getMap();
+                    if (fieldMap != null) {
+                        for (String fn : fieldNames) {
+                            if (fn.contains('.') || fieldMap.containsKey(fn.toLowerCase())) {
+                                validFields.add(fn);
+                            }
+                        }
+                    }
+                    if (!validFields.isEmpty()) {
+                        String soql = 'SELECT ' + String.join(validFields, ', ') + ' FROM ' + String.escapeSingleQuotes(baseObj) + ' WHERE Id = :recordId LIMIT 1';
+                        List<SObject> recs = Database.query(soql, AccessLevel.USER_MODE);
+                        if (!recs.isEmpty()) {
+                            for (String fn : validFields) {
+                                Object val = null;
+                                try {
+                                    if (fn.contains('.')) {
+                                        List<String> parts = fn.split('\\.');
+                                        SObject cur = recs[0];
+                                        for (Integer i = 0; i < parts.size() - 1 && cur != null; i++) { cur = cur.getSObject(parts[i]); }
+                                        if (cur != null) { val = cur.get(parts[parts.size() - 1]); }
+                                    } else {
+                                        val = recs[0].get(fn);
+                                    }
+                                } catch (Exception fieldErr) { /* skip */ }
+                                html = html.replace('{' + fn + '}', val != null ? String.valueOf(val) : '');
+                            }
+                        }
+                    }
+                }
+            } catch (Exception mergeErr) {
+                // Non-fatal — merge tags stay as placeholders
+            }
+        } else {
+            // No pre-baked HTML — simple fallback with CSS-based cell styling (no inline styles)
+            html = '<html><head><style>' +
+                '@page { size: letter; margin: 0.75in; }' +
+                'body { font-family: Helvetica, sans-serif; font-size: 9pt; margin: 0; }' +
+                'table { width: 100%; border-collapse: collapse; }' +
+                'td { border: 0.5pt solid #ccc; padding: 3px 5px; }' +
+                'tr { page-break-inside: avoid; }' +
+                '</style></head><body><table>' + allRows + '</table></body></html>';
+        }
         allRows = null;
 
         Blob pdfBlob = Blob.toPdf(html);

@@ -1198,6 +1198,59 @@ public with sharing class DocGenService {
         shellCv.FirstPublishLocationId = versionId;
         newCvs.add(shellCv);
 
+        // Pre-bake HTML version of the template for Giant Query PDF.
+        // Loop tags ({#Rel}...{/Rel}) are preserved as HTML comments so the
+        // assembler can find and replace them with rendered data at generation time.
+        // This avoids all DOCX XML parsing at generation time — just string replace + Blob.toPdf().
+        if (templateType == 'Word' && xmlEntries.containsKey('word/document.xml')) {
+            try {
+                String docXml = xmlEntries.get('word/document.xml');
+                MergeResult htmlMr = new MergeResult();
+                htmlMr.templateType = 'Word';
+                htmlMr.outputFormat = 'PDF';
+                htmlMr.relsPath = relsPath;
+                htmlMr.mediaPath = mediaPath;
+                htmlMr.relsXml = relsXml;
+
+                // Add styles, headers, footers to the MergeResult
+                for (String xmlName : xmlEntries.keySet()) {
+                    if (xmlName == 'word/styles.xml') {
+                        htmlMr.processedXmlEntries.put(xmlName, xmlEntries.get(xmlName));
+                    } else if (xmlName.startsWith('word/header') || xmlName.startsWith('word/footer')) {
+                        htmlMr.processedXmlEntries.put(xmlName, xmlEntries.get(xmlName));
+                    }
+                }
+
+                // Merge runs so tags are complete, but DON'T process merge fields —
+                // leave {Field} tags intact for generation-time replacement
+                docXml = mergeRunsInTags(docXml);
+                htmlMr.documentXml = docXml;
+                htmlMr.processedXmlEntries.put('word/document.xml', docXml);
+
+                // Build image map for template-embedded images
+                Map<String, String> pdfImages = buildPdfImageMap(htmlMr, templateId);
+                if (htmlMr.processedXmlEntries.containsKey('word/styles.xml')) {
+                    DocGenHtmlRenderer.stylesXml = htmlMr.processedXmlEntries.get('word/styles.xml');
+                }
+
+                String templateHtml = DocGenHtmlRenderer.convertToHtml(
+                    combineXmlWithHeadersFooters(htmlMr), pdfImages
+                );
+                htmlMr = null;
+
+                // Save pre-baked HTML as ContentVersion
+                ContentVersion htmlCv = new ContentVersion();
+                htmlCv.Title = 'docgen_tmpl_html_' + versionId;
+                htmlCv.PathOnClient = 'docgen_tmpl_html_' + versionId + '.html';
+                htmlCv.VersionData = Blob.valueOf(templateHtml);
+                htmlCv.FirstPublishLocationId = versionId;
+                newCvs.add(htmlCv);
+            } catch (Exception htmlErr) {
+                // Non-fatal — Giant Query will fall back to runtime conversion
+                String noop = htmlErr.getMessage(); // NOPMD
+            }
+        }
+
         if (!newCvs.isEmpty()) {
             SObjectAccessDecision cvDecision = Security.stripInaccessible(AccessType.CREATABLE, newCvs);
             insert cvDecision.getRecords();

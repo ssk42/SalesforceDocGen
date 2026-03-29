@@ -106,37 +106,24 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
             allFields.addAll(childFields);
             allFields.addAll(parentFields);
 
-            // Render loop body XML
+            // Render loop body
             String renderedRows = DocGenService.renderLoopBodyForRecords(innerXml, relationshipName, records, allFields);
 
             String seq = String.valueOf(fragmentSequence++).leftPad(5, '0');
             Blob fragmentData;
-            String fragExtension;
 
             if ('PDF'.equalsIgnoreCase(outputFormat)) {
-                // PDF mode: convert 50 rows to HTML now (lightweight per-batch) so assembler
-                // can skip the heavy DOCX XML parser on the full dataset
-                String wrappedXml = '<w:body><w:tbl>' + renderedRows + '</w:tbl></w:body>';
-                renderedRows = null;
-                String html = DocGenHtmlRenderer.convertToHtml(wrappedXml);
-                wrappedXml = null;
-                // Extract just the table rows from the generated HTML
-                Integer tblStart = html.indexOf('<table');
-                Integer tblEnd = html.indexOf('</table>');
-                String tableHtml = (tblStart != -1 && tblEnd != -1)
-                    ? html.substring(html.indexOf('>', tblStart) + 1, tblEnd)
-                    : html;
-                fragmentData = Blob.valueOf(tableHtml);
-                fragExtension = '.html';
+                // Convert DOCX XML rows to simple HTML <tr><td> — lightweight text extraction
+                // No DocGenHtmlRenderer (too heavy for batch execute heap)
+                fragmentData = Blob.valueOf(xmlRowsToHtmlRows(renderedRows));
             } else {
-                // DOCX mode: save raw XML
                 fragmentData = Blob.valueOf(renderedRows);
-                fragExtension = '.xml';
             }
+            renderedRows = null;
 
             ContentVersion cv = new ContentVersion(
                 Title = 'docgen_giant_' + jobId + '_' + seq,
-                PathOnClient = 'docgen_giant_' + jobId + '_' + seq + fragExtension,
+                PathOnClient = 'docgen_giant_' + jobId + '_' + seq + '.html',
                 VersionData = fragmentData,
                 IsMajorVersion = false
             );
@@ -144,6 +131,65 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
 
             update new DocGen_Job__c(Id = jobId, Success_Count__c = fragmentSequence); // NOPMD ApexCRUDViolation — package-internal
         }
+    }
+
+    /**
+     * Lightweight DOCX XML → HTML row converter. Extracts text from <w:t> tags
+     * in each cell, builds simple <tr><td> output. 50 rows = ~5KB, minimal heap.
+     */
+    private static String xmlRowsToHtmlRows(String xml) {
+        String result = '';
+        Integer cursor = 0;
+        while (cursor < xml.length()) {
+            Integer trStart = xml.indexOf('<w:tr', cursor);
+            if (trStart == -1) { break; }
+            Integer trEnd = xml.indexOf('</w:tr>', trStart);
+            if (trEnd == -1) { break; }
+            String trXml = xml.substring(trStart, trEnd + 7);
+            cursor = trEnd + 7;
+            String row = '<tr>';
+            Integer cellIdx = 0;
+            while (cellIdx < trXml.length()) {
+                // Match <w:tc> or <w:tc  — NOT <w:tcPr> or <w:tcW>
+                Integer cellStart = -1;
+                Integer searchFrom = cellIdx;
+                while (searchFrom < trXml.length()) {
+                    Integer candidate = trXml.indexOf('<w:tc', searchFrom);
+                    if (candidate == -1) { break; }
+                    String nextChar = trXml.substring(candidate + 5, Math.min(candidate + 6, trXml.length()));
+                    if (nextChar == '>' || nextChar == ' ') { cellStart = candidate; break; }
+                    searchFrom = candidate + 1;
+                }
+                if (cellStart == -1) { break; }
+                Integer cellEnd = trXml.indexOf('</w:tc>', cellStart);
+                if (cellEnd == -1) { break; }
+                String cellXml = trXml.substring(cellStart, cellEnd);
+                cellIdx = cellEnd + 7;
+                String txt = '';
+                Integer txtIdx = 0;
+                while (txtIdx < cellXml.length()) {
+                    // Match <w:t> or <w:t  — NOT <w:tcPr>, <w:tcW>, <w:tblPr> etc.
+                    Integer wtStart = -1;
+                    Integer wtSearch = txtIdx;
+                    while (wtSearch < cellXml.length()) {
+                        Integer wc = cellXml.indexOf('<w:t', wtSearch);
+                        if (wc == -1) { break; }
+                        String nc = cellXml.substring(wc + 4, Math.min(wc + 5, cellXml.length()));
+                        if (nc == '>' || nc == ' ') { wtStart = wc; break; }
+                        wtSearch = wc + 1;
+                    }
+                    if (wtStart == -1) { break; }
+                    Integer wtContentStart = cellXml.indexOf('>', wtStart) + 1;
+                    Integer wtEnd = cellXml.indexOf('</w:t>', wtContentStart);
+                    if (wtEnd == -1) { break; }
+                    txt += cellXml.substring(wtContentStart, wtEnd);
+                    txtIdx = wtEnd + 6;
+                }
+                row += '<td>' + txt + '</td>';
+            }
+            result += row + '</tr>';
+        }
+        return result;
     }
 
     /**
