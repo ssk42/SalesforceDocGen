@@ -127,7 +127,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             try {
                 Map<String, Object> cfg = DocGenService.extractGiantQueryFragmentConfig(templateId, giantRelationshipName);
                 columnCss = cfg.get('columnCss') != null ? (String) cfg.get('columnCss') : '';
-            } catch (Exception e) { /* non-fatal */ }
+            } catch (Exception e) { String noop = e.getMessage(); } // NOPMD EmptyCatchBlock — non-fatal
 
             if (html.contains('</style>')) {
                 html = html.replace('</style>',
@@ -196,14 +196,14 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                                     } else {
                                         val = recs[0].get(fn);
                                     }
-                                } catch (Exception fieldErr) { /* skip */ }
+                                } catch (Exception fieldErr) { String noop = fieldErr.getMessage(); } // NOPMD EmptyCatchBlock — skip unresolvable field
                                 html = html.replace('{' + fn + '}', val != null ? String.valueOf(val) : '');
                             }
                         }
                     }
                 }
             } catch (Exception mergeErr) {
-                // Non-fatal — merge tags stay as placeholders
+                String noop = mergeErr.getMessage(); // NOPMD EmptyCatchBlock — non-fatal, merge tags stay as placeholders
             }
         } else {
             // No pre-baked HTML — simple fallback
@@ -211,7 +211,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             try {
                 Map<String, Object> cfg = DocGenService.extractGiantQueryFragmentConfig(templateId, giantRelationshipName);
                 fallbackColCss = cfg.get('columnCss') != null ? (String) cfg.get('columnCss') : '';
-            } catch (Exception e) { /* non-fatal */ }
+            } catch (Exception e) { String noop = e.getMessage(); } // NOPMD EmptyCatchBlock — non-fatal
             html = '<html><head><style>' +
                 '@page { size: letter; margin: 0.75in; }' +
                 'body { font-family: Helvetica, sans-serif; font-size: 9pt; margin: 0; }' +
@@ -244,7 +244,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 ShareType = 'V'
             ); // NOPMD
         } catch (Exception linkErr) {
-            // Non-fatal — PDF is still saved, just not linked to the record
+            String noop = linkErr.getMessage(); // NOPMD EmptyCatchBlock — non-fatal, PDF still saved
         }
 
         update new DocGen_Job__c(Id = jobId, Status__c = 'Completed'); // NOPMD

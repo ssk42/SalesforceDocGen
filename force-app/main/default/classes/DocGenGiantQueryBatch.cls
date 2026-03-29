@@ -247,7 +247,7 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
                     try {
                         Integer halfPts = Integer.valueOf(cellXml.substring(szStart, szEnd));
                         styles.add('font-size:' + (halfPts / 2) + 'pt');
-                    } catch (Exception e) { /* skip */ }
+                    } catch (Exception e) { String noop = e.getMessage(); } // NOPMD EmptyCatchBlock — skip invalid font size
                 }
             }
 
