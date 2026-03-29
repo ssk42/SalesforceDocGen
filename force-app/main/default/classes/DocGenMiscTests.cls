@@ -872,6 +872,65 @@ private class DocGenMiscTests {
     // =========================================================================
 
     // =========================================================================
+    // Full-pipeline tests — attachRealDocxToTestTemplate exercises the entire
+    // merge pipeline: mergeTemplate, processXml, DocGenHtmlRenderer, Blob.toPdf
+    // =========================================================================
+
+    @IsTest
+    static void testFullPdfGenerationPipeline() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            TestDataFactory.attachRealDocxToTestTemplate();
+            Account acc = TestDataFactory.getTestAccount();
+            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+
+            Test.startTest();
+            Id docId = DocGenService.generateDocument(tpl.Id, acc.Id);
+            Test.stopTest();
+
+            System.assertNotEquals(null, docId, 'Should generate a document');
+            List<ContentVersion> cvs = [SELECT ContentSize FROM ContentVersion WHERE ContentDocumentId = :docId];
+            System.assert(!cvs.isEmpty(), 'Should have a ContentVersion');
+            System.assert(cvs[0].ContentSize > 0, 'Generated file should not be empty');
+        }
+    }
+
+    @IsTest
+    static void testFullDocxPartsPipeline() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            TestDataFactory.attachRealDocxToTestTemplate();
+            Account acc = TestDataFactory.getTestAccount();
+            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+
+            Test.startTest();
+            Map<String, Object> parts = DocGenService.generateDocumentParts(tpl.Id, acc.Id);
+            Test.stopTest();
+
+            System.assertNotEquals(null, parts, 'Should return parts');
+            System.assertNotEquals(null, parts.get('allXmlParts'), 'Should have XML parts');
+        }
+    }
+
+    @IsTest
+    static void testFullHtmlRenderPipeline() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            TestDataFactory.attachRealDocxToTestTemplate();
+            Account acc = TestDataFactory.getTestAccount();
+            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+
+            Test.startTest();
+            String html = DocGenService.generateHtmlForRecord(tpl.Id, acc.Id, null);
+            Test.stopTest();
+
+            System.assertNotEquals(null, html, 'Should return HTML');
+            System.assert(html.length() > 0, 'HTML should not be empty');
+            System.assert(html.contains('DocGen Test Account'), 'Should contain the account name');
+        }
+    }
+
+    // =========================================================================
     // DocGenFlowAction — success path coverage
     // =========================================================================
 
@@ -6009,9 +6068,9 @@ private class DocGenMiscTests {
     static void testFlowActionSaveToRecordFalse() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
+            TestDataFactory.attachRealDocxToTestTemplate();
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             Account acc = TestDataFactory.getTestAccount();
-            createTestFile();
 
             DocGenFlowAction.Request req = new DocGenFlowAction.Request();
             req.templateId = tpl.Id;
@@ -6024,8 +6083,8 @@ private class DocGenMiscTests {
             );
             Test.stopTest();
 
-            // Even if generation fails (fake DOCX), saveToRecord=false path is exercised
             System.assertEquals(1, responses.size(), 'Should return one response');
+            System.assertEquals(true, responses[0].success, 'Should succeed with real DOCX template');
         }
     }
 
@@ -6033,9 +6092,9 @@ private class DocGenMiscTests {
     static void testFlowActionMultipleRequests() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
+            TestDataFactory.attachRealDocxToTestTemplate();
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             Account acc = TestDataFactory.getTestAccount();
-            createTestFile();
 
             List<DocGenFlowAction.Request> requests = new List<DocGenFlowAction.Request>();
             for (Integer i = 0; i < 3; i++) {
@@ -6051,6 +6110,9 @@ private class DocGenMiscTests {
             Test.stopTest();
 
             System.assertEquals(3, responses.size(), 'Should return three responses');
+            for (DocGenFlowAction.Response resp : responses) {
+                System.assertEquals(true, resp.success, 'Each request should succeed with real DOCX');
+            }
         }
     }
 
@@ -6224,8 +6286,8 @@ private class DocGenMiscTests {
     static void testBatchMergeOnlyMode() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
+            TestDataFactory.attachRealDocxToTestTemplate();
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            createTestFile();
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = tpl.Id,
@@ -6249,8 +6311,8 @@ private class DocGenMiscTests {
     static void testBatchMergeModeConstructor() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
+            TestDataFactory.attachRealDocxToTestTemplate();
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            createTestFile();
 
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = tpl.Id,

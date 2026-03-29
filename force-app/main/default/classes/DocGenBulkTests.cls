@@ -32,6 +32,7 @@ private class DocGenBulkTests {
     static void testSubmitJob() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
+            TestDataFactory.attachRealDocxToTestTemplate();
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
             Test.startTest();
             Id jobId = DocGenBulkController.submitJob(t.Id, 'Name = \'DocGen Test Account\'', 'Test Job', false, 1, false);
@@ -39,6 +40,7 @@ private class DocGenBulkTests {
 
             DocGen_Job__c job = [SELECT Id, Status__c FROM DocGen_Job__c WHERE Id = :jobId];
             System.assertNotEquals(null, job.Id, 'Job should be created');
+            System.assertNotEquals('Queued', job.Status__c, 'Job should have progressed from Queued');
         }
     }
 
@@ -182,9 +184,7 @@ private class DocGenBulkTests {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             // Exercises the 'Completed' branch in finish() (successCount > 0, failCount == 0)
-            // The existing testSubmitJob covers this partly, but the batch runs with
-            // a real template that has no DOCX file, so it will error.
-            // We create a job and simulate by directly calling start/execute/finish
+            TestDataFactory.attachRealDocxToTestTemplate();
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             DocGen_Job__c job = new DocGen_Job__c(
@@ -199,9 +199,9 @@ private class DocGenBulkTests {
             Database.executeBatch(batch, 1);
             Test.stopTest();
 
-            // The batch will fail per-record (no DOCX file), so status should be 'Failed'
             DocGen_Job__c updated = [SELECT Status__c, Error_Count__c, Success_Count__c FROM DocGen_Job__c WHERE Id = :job.Id];
             System.assertNotEquals(null, updated.Status__c, 'Should have a status');
+            System.assertNotEquals('Queued', updated.Status__c, 'Status should have progressed');
         }
     }
 
@@ -549,6 +549,7 @@ private class DocGenBulkTests {
             // Run a batch that will finish and attempt to send notification.
             // Without the CustomNotificationType 'DocGen_Job_Complete' deployed,
             // sendJobNotification gracefully returns (no exception).
+            TestDataFactory.attachRealDocxToTestTemplate();
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             DocGen_Job__c job = new DocGen_Job__c(
