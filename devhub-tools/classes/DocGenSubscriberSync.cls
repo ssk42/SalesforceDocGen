@@ -50,13 +50,13 @@ public without sharing class DocGenSubscriberSync implements Schedulable {
             existingOrgs.put(so.Org_Id__c, so);
         }
 
-        Set<String> orgNames = new Set<String>();
-        for (PackageSubscriber sub : subscribers) {
-            if (String.isNotBlank(sub.OrgName)) orgNames.add(sub.OrgName);
-        }
+        // Build normalized name → Account map for fuzzy matching.
+        // Multiple orgs (prod + sandboxes) from the same company should link to ONE Account.
         Map<String, Account> accountsByName = new Map<String, Account>();
-        for (Account a : [SELECT Id, Name FROM Account WHERE Name IN :orgNames WITH SYSTEM_MODE]) {
+        Map<String, Account> accountsByNormalized = new Map<String, Account>();
+        for (Account a : [SELECT Id, Name FROM Account WITH SYSTEM_MODE LIMIT 50000]) {
             accountsByName.put(a.Name, a);
+            accountsByNormalized.put(normalizeOrgName(a.Name), a);
         }
 
         Id customerRtId;
@@ -65,14 +65,40 @@ public without sharing class DocGenSubscriberSync implements Schedulable {
         ];
         if (!rts.isEmpty()) customerRtId = rts[0].Id;
 
+        // Match subscriber orgs to Accounts. Try exact name first, then normalized
+        // (strips sandbox/developer suffixes so "Acme Corp - Sandbox" matches "Acme Corp").
+        // Only create a new Account if no match found AND the org doesn't already have one.
         List<Account> newAccounts = new List<Account>();
+        Map<String, Account> resolvedAccounts = new Map<String, Account>(); // orgKey → Account
         for (PackageSubscriber sub : subscribers) {
             String orgName = String.isNotBlank(sub.OrgName) ? sub.OrgName : sub.OrgKey;
-            if (!accountsByName.containsKey(orgName)) {
-                Account a = new Account(Name = orgName);
-                if (customerRtId != null) a.RecordTypeId = customerRtId;
-                newAccounts.add(a);
-                accountsByName.put(orgName, a);
+
+            // Skip if this org already has an Account linked
+            if (existingOrgs.containsKey(sub.OrgKey) && existingOrgs.get(sub.OrgKey).Account__c != null) {
+                continue;
+            }
+
+            // Try exact match
+            Account matched = accountsByName.get(orgName);
+            // Try normalized match (strip sandbox/dev suffixes)
+            if (matched == null) {
+                matched = accountsByNormalized.get(normalizeOrgName(orgName));
+            }
+
+            if (matched != null) {
+                resolvedAccounts.put(sub.OrgKey, matched);
+            } else {
+                // Create new Account using the normalized name (clean company name)
+                String cleanName = normalizeOrgName(orgName);
+                if (String.isBlank(cleanName)) cleanName = orgName;
+                // Check if we already queued an Account with this clean name
+                if (!accountsByNormalized.containsKey(cleanName)) {
+                    Account a = new Account(Name = cleanName);
+                    if (customerRtId != null) a.RecordTypeId = customerRtId;
+                    newAccounts.add(a);
+                    accountsByNormalized.put(cleanName, a);
+                }
+                resolvedAccounts.put(sub.OrgKey, accountsByNormalized.get(cleanName));
             }
         }
 
@@ -81,7 +107,10 @@ public without sharing class DocGenSubscriberSync implements Schedulable {
             for (Account a : newAccounts) { deduped.put(a.Name, a); }
             newAccounts = deduped.values();
             insert newAccounts; // NOPMD ApexCRUDViolation — scheduled sync: auto-creating Account records for subscriber orgs
-            for (Account a : newAccounts) { accountsByName.put(a.Name, a); }
+            for (Account a : newAccounts) {
+                accountsByName.put(a.Name, a);
+                accountsByNormalized.put(normalizeOrgName(a.Name), a);
+            }
         }
 
         List<DocGen_Subscriber_Org__c> upsertOrgs = new List<DocGen_Subscriber_Org__c>();
@@ -105,8 +134,8 @@ public without sharing class DocGenSubscriberSync implements Schedulable {
             if (versionMap.containsKey(sub.MetadataPackageVersionId)) {
                 so.Package_Version__c = versionMap.get(sub.MetadataPackageVersionId);
             }
-            if (so.Account__c == null && accountsByName.containsKey(orgName)) {
-                so.Account__c = accountsByName.get(orgName).Id;
+            if (so.Account__c == null && resolvedAccounts.containsKey(sub.OrgKey)) {
+                so.Account__c = resolvedAccounts.get(sub.OrgKey).Id;
             }
             upsertOrgs.add(so);
         }
@@ -114,5 +143,21 @@ public without sharing class DocGenSubscriberSync implements Schedulable {
         if (!upsertOrgs.isEmpty()) {
             upsert upsertOrgs Org_Id__c; // NOPMD ApexCRUDViolation — scheduled sync: upserting Subscriber Org records
         }
+    }
+
+    /**
+     * Normalizes an org name for fuzzy Account matching.
+     * Strips common Salesforce org suffixes so production and sandbox orgs
+     * from the same company resolve to one Account.
+     * "Acme Corp - Sandbox" → "Acme Corp"
+     * "Acme Corp Developer Edition" → "Acme Corp"
+     */
+    private static String normalizeOrgName(String name) {
+        if (String.isBlank(name)) return '';
+        String n = name.trim();
+        // Strip trailing patterns: " - Sandbox", " Sandbox", " - Developer", " Developer Edition", " - Dev", " (Sandbox)", " (Dev)"
+        n = n.replaceAll('(?i)\\s*[-–]?\\s*(sandbox|developer\\s*edition|developer|dev|scratch|uat|staging|test|qa)\\s*$', '');
+        n = n.replaceAll('(?i)\\s*\\((sandbox|dev|developer|test|uat|qa|staging|scratch)\\)\\s*$', '');
+        return n.trim();
     }
 }
