@@ -381,7 +381,7 @@
             </apex:outputPanel>
         </div>
         <h1>Document Generation<br/>for <span>Salesforce</span></h1>
-        <p>Generate PDFs, Word docs, Excel spreadsheets, and PowerPoint presentations from any record. Merge tags, child loops, images, barcodes, QR codes, and aggregates.</p>
+        <p>Generate PDFs and Word docs from any record. Merge tags, child loops, images, barcodes, QR codes, and aggregates. PowerPoint and Excel coming soon.</p>
         <div class="hero-actions">
             <a href="{!installLinkProd}" class="btn btn-primary">Install Free</a>
             <a href="{!installLinkSandbox}" class="btn btn-secondary">Install in Sandbox</a>
@@ -398,7 +398,7 @@
             <div class="feature-card">
                 <div class="feature-icon">&#128196;</div>
                 <h3>Multi-Format Output</h3>
-                <p>PDF, Word, Excel, and PowerPoint. Use your own branded templates — just add merge tags and upload.</p>
+                <p>PDF and Word today. PowerPoint and Excel coming soon. Use your own branded templates — just add merge tags and upload.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">&#128257;</div>
@@ -488,7 +488,7 @@
                         <td class="cmp-no">No</td>
                     </tr>
                     <tr>
-                        <td>Word/PPTX Templates</td>
+                        <td>Word Templates</td>
                         <td class="col-docgen cmp-yes">Yes</td>
                         <td class="cmp-yes">Yes</td>
                         <td class="cmp-no">HTML only</td>
@@ -519,7 +519,7 @@
                     </tr>
                     <tr>
                         <td>PPTX Output</td>
-                        <td class="col-docgen cmp-yes">Yes</td>
+                        <td class="col-docgen cmp-partial">Coming Soon</td>
                         <td class="cmp-yes">Yes</td>
                         <td class="cmp-no">No</td>
                         <td class="cmp-no">No</td>
