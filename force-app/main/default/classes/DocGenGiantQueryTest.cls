@@ -42,6 +42,16 @@ private class DocGenGiantQueryTest {
         );
         insert tpl;
 
+        // Create Template Version (active) — required by attachRealDocxToTestTemplate and assembler tests
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Is_Active__c = true,
+            Query_Config__c = v3Config,
+            Type__c = 'Word',
+            Base_Object_API__c = 'Account'
+        );
+        insert ver;
+
         // Create Account with Contacts
         Account acc = new Account(Name = 'Giant Query Test Account');
         insert acc;
@@ -349,6 +359,20 @@ private class DocGenGiantQueryTest {
         }
     }
 
+    /**
+     * Attaches a real DOCX to this test class's template and updates the active version.
+     * Uses local queries instead of TestDataFactory getters which expect 'DocGen Test Template'.
+     */
+    private static ContentVersion attachDocxToLocalTemplate() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
+        DocGen_Template_Version__c ver = [SELECT Id, Content_Version_Id__c FROM DocGen_Template_Version__c
+            WHERE Template__c = :tpl.Id AND Is_Active__c = true LIMIT 1];
+        ContentVersion cv = TestDataFactory.createValidDocxFile(tpl.Id, TestDataFactory.buildSimpleDocXml());
+        ver.Content_Version_Id__c = cv.Id;
+        update ver;
+        return cv;
+    }
+
     // =========================================================================
     // Giant Query Flow Action Tests
     // =========================================================================
@@ -359,7 +383,7 @@ private class DocGenGiantQueryTest {
         System.runAs(u) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
             Account acc = [SELECT Id FROM Account LIMIT 1];
-            TestDataFactory.attachRealDocxToTestTemplate();
+            attachDocxToLocalTemplate();
 
             DocGenGiantQueryFlowAction.Request req = new DocGenGiantQueryFlowAction.Request();
             req.templateId = tpl.Id;
@@ -404,7 +428,7 @@ private class DocGenGiantQueryTest {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
-            TestDataFactory.attachRealDocxToTestTemplate();
+            attachDocxToLocalTemplate();
 
             DocGenGiantQueryFlowAction.Request req = new DocGenGiantQueryFlowAction.Request();
             req.templateId = tpl.Id;
