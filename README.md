@@ -1,6 +1,8 @@
 # Portwood DocGen — Free Document Generation for Salesforce
 
-Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes and QR codes, compute totals — 100% native, zero external dependencies, completely free. PowerPoint and Excel coming soon.
+Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes and QR codes, compute totals — 100% native, zero external dependencies, 100% free forever. All features, all users, no paid tiers. PowerPoint and Excel coming soon.
+
+[Join the Slack Community](https://portwoodglobalsolutions.com/DocGenCommunity) | [Website](https://portwoodglobalsolutions.com) | [Roadmap](https://portwoodglobalsolutions.com/DocGenRoadmap)
 
 [![Version](https://img.shields.io/badge/version-1.12.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -373,14 +375,28 @@ QR encoding verified module-by-module against [qrcode-generator](https://www.npm
 
 ## Community
 
-DocGen is open source, community-driven, and published through [Portwood Global Solutions](https://portwoodglobalsolutions.com). We're working toward listing as a **Salesforce Accelerator** (like DLRS and other community tools).
+DocGen is 100% free, open source, and community-driven. Published through [Portwood Global Solutions](https://portwoodglobalsolutions.com).
 
 | Channel | What It's For |
 |---------|---------------|
-| [Issues](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/issues) | Bug reports, feature requests, questions |
-| [Discussions](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/discussions) | Ideas, show-and-tell, general conversation |
-| [Community Hub](https://portwoodglobalsolutions.com/DocGenCommunity) | Forum with real-time help and template sharing |
-| [Website](https://portwoodglobalsolutions.com) | Install links, live demo, documentation |
+| [Slack](https://portwoodglobalsolutions.com/DocGenCommunity) | Real-time help, feature requests, template sharing, show-and-tell |
+| [GitHub Issues](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/issues) | Bug reports and tracked feature requests |
+| [Roadmap](https://portwoodglobalsolutions.com/DocGenRoadmap) | See what's shipped and what's coming next |
+| [Website](https://portwoodglobalsolutions.com) | Install links, live demo, feature comparison |
+
+### Slack Channels
+
+| Channel | Purpose |
+|---------|---------|
+| `#announcements` | Release notes, new features, important updates |
+| `#feature-requests` | Suggest and vote on what gets built next |
+| `#help` | Get help with templates, merge tags, Flows, and setup |
+| `#bug-reports` | Report issues — we triage and fix fast |
+| `#template-sharing` | Share and discover ready-to-use Word templates |
+| `#show-and-tell` | Share what you've built with DocGen |
+| `#general` | Tips, tricks, and community chat |
+
+Need dedicated support? We create **private client channels** for orgs that need hands-on implementation help.
 
 ## Contributing
 
