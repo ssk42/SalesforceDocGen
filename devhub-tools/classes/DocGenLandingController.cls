@@ -2,6 +2,7 @@
  * Controller for the DocGen landing page and community signup.
  * Handles install links, help request form submissions, and
  * automated Chatter Free user creation for community signups.
+ * Welcome emails sent via Resend API (not Salesforce email sends).
  * Deploy to partner org only — runs on VF Site with guest user profile.
  */
 public without sharing class DocGenLandingController {
@@ -9,6 +10,8 @@ public without sharing class DocGenLandingController {
     private static final String DEMO_USER_ID = '005di00000GkOuFAAV';
     private static final String DEMO_RET_URL = '/lightning/app/portwoodglobal__DocGen/page/portwoodglobal__DocGen_Command_Hub';
     private static final String CHATTER_PROFILE_NAME = 'Chatter Free User';
+    private static final String LOGIN_URL = 'https://portwoodglobalsolutions.my.salesforce.com';
+    private static final String RESET_URL = LOGIN_URL + '/secur/forgotpassword.jsp';
 
     private String packageVersionId;
 
@@ -102,8 +105,8 @@ public without sharing class DocGenLandingController {
 
     /**
      * Creates a Chatter Free user and adds them to all DocGen community groups.
-     * Salesforce automatically sends a welcome email with login credentials
-     * (platform email — not an org email send).
+     * Sets a temporary password to suppress SF's welcome email, then sends
+     * a branded welcome email via Resend with a password reset link.
      */
     @RemoteAction
     public static String createChatterUser(String name, String email, String company) {
@@ -113,7 +116,7 @@ public without sharing class DocGenLandingController {
         email = email.trim().toLowerCase();
 
         // Check if a User with this email already exists
-        List<User> existingUsers = [SELECT Id, IsActive FROM User WHERE Email = :email WITH SYSTEM_MODE LIMIT 1];
+        List<User> existingUsers = [SELECT Id, IsActive, Username FROM User WHERE Email = :email WITH SYSTEM_MODE LIMIT 1];
         if (!existingUsers.isEmpty()) {
             if (existingUsers[0].IsActive) {
                 throw new AuraHandledException('An account with this email already exists. Log in at portwoodglobalsolutions.my.salesforce.com.');
@@ -122,7 +125,7 @@ public without sharing class DocGenLandingController {
             User inactive = existingUsers[0];
             inactive.IsActive = true;
             update inactive; // NOPMD ApexCRUDViolation — reactivating existing Chatter user
-            addToChatterGroups(inactive.Id);
+            postSetupAsync(inactive.Id, name, email);
             return 'reactivated';
         }
 
@@ -139,7 +142,6 @@ public without sharing class DocGenLandingController {
         String username = email + '.docgen';
         List<User> usernameTaken = [SELECT Id FROM User WHERE Username = :username WITH SYSTEM_MODE LIMIT 1];
         if (!usernameTaken.isEmpty()) {
-            // Add random suffix if taken
             username = email.substringBefore('@') + '.' + String.valueOf(Math.abs(Crypto.getRandomInteger())).left(6)
                 + '@' + email.substringAfter('@') + '.docgen';
         }
@@ -170,33 +172,101 @@ public without sharing class DocGenLandingController {
         );
         insert newUser; // NOPMD ApexCRUDViolation — creating Chatter Free user from community signup
 
-        // Add to groups async (mixed DML: User + non-setup object)
-        addToChatterGroups(newUser.Id);
+        // Set a temp password to suppress SF's automatic welcome email
+        String tempPw = EncodingUtil.base64Encode(Crypto.generateAesKey(128)).left(20) + '!1a';
+        System.setPassword(newUser.Id, tempPw);
+
+        // Add to groups + send welcome email via Resend (async — callout + mixed DML)
+        postSetupAsync(newUser.Id, name, email);
 
         return 'created';
     }
 
     /**
-     * Adds a user to all DocGen Chatter groups. Uses @future to avoid
-     * mixed DML errors (User is a setup object).
+     * Handles post-user-creation tasks: adds user to Chatter groups and
+     * sends a branded welcome email via Resend. Uses @future(callout=true)
+     * to avoid mixed DML errors and enable HTTP callout to Resend.
      */
-    @future
-    private static void addToChatterGroups(Id userId) {
+    @future(callout=true)
+    private static void postSetupAsync(Id userId, String displayName, String email) {
+        // Add to all DocGen Chatter groups
         List<CollaborationGroup> groups = [
             SELECT Id FROM CollaborationGroup
             WHERE Name LIKE 'DocGen -%'
             WITH SYSTEM_MODE
         ];
         List<CollaborationGroupMember> members = new List<CollaborationGroupMember>();
+        Set<Id> existingGroupIds = new Set<Id>();
+        for (CollaborationGroupMember existing : [
+            SELECT CollaborationGroupId FROM CollaborationGroupMember
+            WHERE MemberId = :userId WITH SYSTEM_MODE
+        ]) {
+            existingGroupIds.add(existing.CollaborationGroupId);
+        }
         for (CollaborationGroup g : groups) {
-            members.add(new CollaborationGroupMember(
-                CollaborationGroupId = g.Id,
-                MemberId = userId,
-                NotificationFrequency = 'P' // Each post
-            ));
+            if (!existingGroupIds.contains(g.Id)) {
+                members.add(new CollaborationGroupMember(
+                    CollaborationGroupId = g.Id,
+                    MemberId = userId,
+                    NotificationFrequency = 'P' // Each post
+                ));
+            }
         }
         if (!members.isEmpty()) {
-            insert members; // NOPMD ApexCRUDViolation — adding new Chatter user to community groups
+            insert members; // NOPMD ApexCRUDViolation — adding Chatter user to community groups
+        }
+
+        // Send branded welcome email via Resend
+        sendWelcomeEmail(displayName, email);
+    }
+
+    /**
+     * Sends a branded welcome email via Resend API with a password reset link.
+     * Does not consume Salesforce org email sends.
+     */
+    private static void sendWelcomeEmail(String displayName, String toEmail) {
+        DocGen_Demo_Config__c config = DocGen_Demo_Config__c.getOrgDefaults();
+        if (config == null || String.isBlank(config.Resend_API_Key__c)) {
+            System.debug(LoggingLevel.ERROR, 'sendWelcomeEmail: No Resend API key configured');
+            return;
+        }
+
+        String firstName = displayName.contains(' ') ? displayName.substringBefore(' ') : displayName;
+
+        String htmlBody = '<div style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif; max-width: 560px; margin: 0 auto; background: #0f172a; border-radius: 12px; padding: 2.5rem; color: #e2e8f0;">' +
+            '<h1 style="font-size: 1.5rem; font-weight: 800; color: #fff; margin-bottom: 0.5rem;">Welcome to the DocGen Community!</h1>' +
+            '<p style="color: #94a3b8; margin-bottom: 1.5rem;">Hey ' + firstName.escapeHtml4() + ', your account is ready. You\'ve been added to all the community groups.</p>' +
+
+            '<div style="background: #1e293b; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem;">' +
+            '<p style="color: #94a3b8; font-size: 0.85rem; margin: 0 0 0.25rem;">Your login:</p>' +
+            '<p style="color: #fff; font-weight: 600; margin: 0;">' + toEmail.escapeHtml4() + '</p>' +
+            '</div>' +
+
+            '<p style="color: #94a3b8; margin-bottom: 1rem;">Set your password to get started:</p>' +
+            '<a href="' + RESET_URL + '" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; text-decoration: none; border-radius: 50px; font-weight: 700; font-size: 1rem;">Set Password &amp; Log In</a>' +
+
+            '<div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.06);">' +
+            '<p style="color: #475569; font-size: 0.8rem; margin: 0;">Once logged in, you\'ll find your community groups in Chatter. Post questions, request features, share templates, and connect with other DocGen admins.</p>' +
+            '</div>' +
+
+            '<p style="color: #334155; font-size: 0.75rem; margin-top: 1.5rem;">Portwood DocGen &mdash; Free document generation for Salesforce</p>' +
+            '</div>';
+
+        HttpRequest req = new HttpRequest();
+        req.setEndpoint('https://api.resend.com/emails'); // NOPMD ApexSuggestUsingNamedCred — Resend REST API uses Bearer token
+        req.setMethod('POST');
+        req.setHeader('Authorization', 'Bearer ' + config.Resend_API_Key__c); // NOPMD ApexSuggestUsingNamedCred — Resend API
+        req.setHeader('Content-Type', 'application/json');
+        req.setBody(JSON.serialize(new Map<String, String>{
+            'from' => 'DocGen Community <hello@portwoodglobalsolutions.com>',
+            'to' => toEmail,
+            'subject' => 'Welcome to the DocGen Community',
+            'html' => htmlBody
+        }));
+        Http http = new Http();
+        HttpResponse res = http.send(req);
+        if (res.getStatusCode() >= 400) {
+            System.debug(LoggingLevel.ERROR, 'Resend welcome email failed: ' + res.getStatusCode() + ' ' + res.getBody());
         }
     }
 }
