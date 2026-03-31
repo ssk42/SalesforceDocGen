@@ -13,24 +13,27 @@ public without sharing class DocGenLandingController {
     private static final String LOGIN_URL = 'https://portwoodglobalsolutions.my.salesforce.com';
     private static final String RESET_URL = LOGIN_URL + '/secur/forgotpassword.jsp';
 
-    private String packageVersionId;
+    private DocGen_Landing_Config__mdt configRecord;
 
-    private String getPackageVersionId() {
-        if (packageVersionId == null) {
+    private DocGen_Landing_Config__mdt getConfig() {
+        if (configRecord == null) {
             List<DocGen_Landing_Config__mdt> configs = [
-                SELECT Package_Version_Id__c FROM DocGen_Landing_Config__mdt
+                SELECT Package_Version_Id__c, Slack_Invite_Url__c FROM DocGen_Landing_Config__mdt
                 WHERE DeveloperName = 'Current' LIMIT 1
             ];
-            packageVersionId = configs.isEmpty() ? '' : configs[0].Package_Version_Id__c;
+            configRecord = configs.isEmpty() ? new DocGen_Landing_Config__mdt() : configs[0];
         }
-        return packageVersionId;
+        return configRecord;
     }
 
     public String installLinkProd {
-        get { return 'https://login.salesforce.com/packaging/installPackage.apexp?p0=' + getPackageVersionId(); }
+        get { return 'https://login.salesforce.com/packaging/installPackage.apexp?p0=' + getConfig().Package_Version_Id__c; }
     }
     public String installLinkSandbox {
-        get { return 'https://test.salesforce.com/packaging/installPackage.apexp?p0=' + getPackageVersionId(); }
+        get { return 'https://test.salesforce.com/packaging/installPackage.apexp?p0=' + getConfig().Package_Version_Id__c; }
+    }
+    public String slackInviteUrl {
+        get { return getConfig().Slack_Invite_Url__c; }
     }
 
     public String demoUrl {
