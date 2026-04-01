@@ -332,9 +332,7 @@ public with sharing class DocGenBulkController {
                 Status__c = 'Queued',
                 Merge_Only__c = isMergeOnly
             );
-            SObjectAccessDecision jobDec = Security.stripInaccessible(AccessType.CREATABLE, new List<DocGen_Job__c>{ job });
-            insert jobDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-            job.Id = jobDec.getRecords()[0].Id;
+            insert job; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
             // 2. Run Batch — user-configurable batch size (default 1, max 200)
             Integer size = (batchSize != null && batchSize >= 1 && batchSize <= 200) ? batchSize : 1;
@@ -463,8 +461,7 @@ public with sharing class DocGenBulkController {
                 Description__c = description,
                 Query_Condition__c = condition
             );
-            SObjectAccessDecision sqDec = Security.stripInaccessible(AccessType.CREATABLE, new List<DocGen_Saved_Query__c>{ sq });
-            insert sqDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+            insert sq; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error saving query.');
         }

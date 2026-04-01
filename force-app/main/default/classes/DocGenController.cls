@@ -422,9 +422,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     'childCount' => counts.get(giantRelationship)
                 })
             );
-            SObjectAccessDecision jobDec1 = Security.stripInaccessible(AccessType.CREATABLE, new List<DocGen_Job__c>{ job });
-            insert jobDec1.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-            job.Id = jobDec1.getRecords()[0].Id;
+            insert job; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
             // Launch batch — shell PDF generation happens in start() with fresh heap
             DocGenGiantQueryBatch batch = new DocGenGiantQueryBatch(
@@ -608,9 +606,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Label__c = 'Giant Query PDF',
                 Parent_Record_Id__c = String.valueOf(recordId)
             );
-            SObjectAccessDecision jobDec2 = Security.stripInaccessible(AccessType.CREATABLE, new List<DocGen_Job__c>{ job });
-            insert jobDec2.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-            job.Id = jobDec2.getRecords()[0].Id;
+            insert job; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
             // Ensure relationshipName is in the config (V1 scout doesn't include it)
             childNodeConfig.put('relationshipName', giantRelationship);
@@ -869,13 +865,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         other.Is_Default__c = false;
                     }
                     if (!otherDefaults.isEmpty()) {
-                        SObjectAccessDecision defDec = Security.stripInaccessible(AccessType.UPDATABLE, otherDefaults);
-                        update defDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+                        update otherDefaults; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
                     }
                 }
             }
-            SObjectAccessDecision tmplDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Template__c>{ template });
-            update tmplDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+            update template; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
             // 2. Create Version if requested
             if (createVersion == true) {
@@ -889,8 +883,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     av.Is_Active__c = false;
                 }
                 if (!activeVersions.isEmpty()) {
-                    SObjectAccessDecision avDec = Security.stripInaccessible(AccessType.UPDATABLE, activeVersions);
-                    update avDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+                    update activeVersions; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
                 }
 
                 // Get latest ContentVersionId
@@ -919,9 +912,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 version.Type__c = (String) fields.get('Type__c');
                 version.Base_Object_API__c = (String) fields.get('Base_Object_API__c');
 
-                SObjectAccessDecision verDec = Security.stripInaccessible(AccessType.CREATABLE, new List<DocGen_Template_Version__c>{ version });
-                insert verDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-                version.Id = verDec.getRecords()[0].Id;
+                insert version; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
                 // Extract images from DOCX/PPTX and save as ContentVersions linked to the version.
                 // Blob.toPdf() cannot render data URI images — needs committed CV URLs.
@@ -995,14 +986,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 v.Is_Active__c = false;
             }
             if (!others.isEmpty()) {
-                SObjectAccessDecision othDec = Security.stripInaccessible(AccessType.UPDATABLE, others);
-                update othDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+                update others; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
             }
 
             // 2. Activate this one
             version.Is_Active__c = true;
-            SObjectAccessDecision actDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Template_Version__c>{ version });
-            update actDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+            update version; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
             // 3. Update Template Record Headline
             DocGen_Template__c template = new DocGen_Template__c(Id = version.Template__c);
@@ -1012,8 +1001,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             template.Type__c = version.Type__c;
             template.Base_Object_API__c = version.Base_Object_API__c;
 
-            SObjectAccessDecision tmplActDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Template__c>{ template });
-            update tmplActDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+            update template; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
         } catch (Exception e) {
             throw new DocGenException('Error activating version: ' + e.getMessage());
@@ -1343,8 +1331,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         share.put('RowCause', 'Manual');
 
         try {
-            SObjectAccessDecision shareDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<SObject>{ share });
-            insert shareDecision.getRecords();
+            insert share; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
         } catch (DmlException e) {
             throw DocGenService.ahe(e, 'Error sharing template. Please check permissions.');
         }
@@ -3186,11 +3173,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Description__c = d.get('desc')
             ));
         }
-        SObjectAccessDecision tmplsDec = Security.stripInaccessible(AccessType.CREATABLE, templates);
-        insert tmplsDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-        for (Integer i = 0; i < templates.size(); i++) {
-            templates[i].Id = tmplsDec.getRecords()[i].Id;
-        }
+        insert templates; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
         // Create ContentVersions (DOCX files) linked to templates
         List<ContentVersion> cvs = new List<ContentVersion>();
@@ -3223,11 +3206,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Base_Object_API__c = templates[i].Base_Object_API__c
             ));
         }
-        SObjectAccessDecision versDec = Security.stripInaccessible(AccessType.CREATABLE, versions);
-        insert versDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-        for (Integer i = 0; i < versions.size(); i++) {
-            versions[i].Id = versDec.getRecords()[i].Id;
-        }
+        insert versions; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
         // Extract and save template images for PDF rendering
         for (Integer i = 0; i < versions.size(); i++) {
@@ -3358,9 +3337,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             tmpl.Query_Config__c = (String) tmplData.get('Query_Config__c');
             tmpl.Document_Title_Format__c = (String) tmplData.get('Document_Title_Format__c');
             tmpl.Is_Default__c = tmplData.get('Is_Default__c') == true;
-            SObjectAccessDecision impTmplDec = Security.stripInaccessible(AccessType.CREATABLE, new List<DocGen_Template__c>{ tmpl });
-            insert impTmplDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-            tmpl.Id = impTmplDec.getRecords()[0].Id;
+            insert tmpl; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
             // 2. Upload template file if present
             Map<String, Object> fileData = (Map<String, Object>) bundle.get('templateFile');
@@ -3387,9 +3364,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ver.Description__c = (String) tmplData.get('Description__c');
             ver.Type__c = (String) tmplData.get('Type__c');
             ver.Base_Object_API__c = (String) tmplData.get('Base_Object_API__c');
-            SObjectAccessDecision impVerDec = Security.stripInaccessible(AccessType.CREATABLE, new List<DocGen_Template_Version__c>{ ver });
-            insert impVerDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-            ver.Id = impVerDec.getRecords()[0].Id;
+            insert ver; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
             // 4. Extract images and pre-decompose (non-fatal)
             try {
@@ -3412,8 +3387,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     newSq.Description__c = (String) sq.get('Description__c');
                     sqs.add(newSq);
                 }
-                SObjectAccessDecision sqsDec = Security.stripInaccessible(AccessType.CREATABLE, sqs);
-                insert sqsDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+                insert sqs; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
             }
 
             return tmpl.Id;

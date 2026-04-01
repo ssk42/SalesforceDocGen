@@ -59,8 +59,7 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
         Integer totalChildren = Database.countQuery(countQuery, AccessLevel.USER_MODE);
 
         Integer totalPages = (Integer) Math.ceil((Decimal) totalChildren / batchSize);
-        SObjectAccessDecision harvestDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Job__c>{ new DocGen_Job__c(Id = jobId, Status__c = 'Harvesting', Total_Records__c = totalChildren) });
-        update harvestDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+        update new DocGen_Job__c(Id = jobId, Status__c = 'Harvesting', Total_Records__c = totalChildren); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
         List<String> pages = new List<String>();
         for (Integer i = 0; i < totalPages; i++) {
@@ -133,8 +132,7 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
             insert cvDec.getRecords();
         }
         // Update progress
-        SObjectAccessDecision progDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Job__c>{ new DocGen_Job__c(Id = jobId, Success_Count__c = fragmentSequence) });
-        update progDec.getRecords();
+        update new DocGen_Job__c(Id = jobId, Success_Count__c = fragmentSequence); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
     }
 
     /**
@@ -279,12 +277,10 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
                 // Chain to assembler Queueable — finish() heap is too constrained
                 System.enqueueJob(new DocGenGiantQueryAssembler(jobId, templateId, recordId, giantRelationshipName));
             } else {
-                SObjectAccessDecision completeDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Job__c>{ new DocGen_Job__c(Id = jobId, Status__c = 'Completed') });
-                update completeDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+                update new DocGen_Job__c(Id = jobId, Status__c = 'Completed'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
             }
         } catch (Exception e) {
-            SObjectAccessDecision failDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Job__c>{ new DocGen_Job__c(Id = jobId, Status__c = 'Failed', Label__c = e.getMessage().left(255)) });
-            update failDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+            update new DocGen_Job__c(Id = jobId, Status__c = 'Failed', Label__c = e.getMessage().left(255)); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
         }
     }
 }

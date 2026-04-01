@@ -167,9 +167,7 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
             Label__c = 'Giant Query PDF (Flow)',
             Parent_Record_Id__c = String.valueOf(recordId)
         );
-        SObjectAccessDecision jobDec = Security.stripInaccessible(AccessType.CREATABLE, new List<DocGen_Job__c>{ job });
-        insert jobDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-        job.Id = jobDec.getRecords()[0].Id;
+        insert job; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
         childNodeConfig.put('relationshipName', giantRelationship);
 

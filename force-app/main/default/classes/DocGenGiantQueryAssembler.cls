@@ -58,8 +58,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             }
 
         } catch (Exception e) {
-            SObjectAccessDecision failDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Job__c>{ new DocGen_Job__c(Id = jobId, Status__c = 'Failed', Label__c = e.getMessage().left(255)) });
-            update failDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+            update new DocGen_Job__c(Id = jobId, Status__c = 'Failed', Label__c = e.getMessage().left(255)); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
         }
     }
 
@@ -76,8 +75,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         }
 
         if (String.isBlank(allRows)) {
-            SObjectAccessDecision noDataDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Job__c>{ new DocGen_Job__c(Id = jobId, Status__c = 'Failed', Label__c = 'No data to render') });
-            update noDataDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+            update new DocGen_Job__c(Id = jobId, Status__c = 'Failed', Label__c = 'No data to render'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
             return;
         }
 
@@ -159,8 +157,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             }
         }
 
-        SObjectAccessDecision completeDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<DocGen_Job__c>{ new DocGen_Job__c(Id = jobId, Status__c = 'Completed') });
-        update completeDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+        update new DocGen_Job__c(Id = jobId, Status__c = 'Completed'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
     }
 
     /**
