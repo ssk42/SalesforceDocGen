@@ -87,12 +87,6 @@
             border: 2px solid rgba(255,255,255,0.2);
         }
         .btn-secondary:hover { background: rgba(255,255,255,0.15); }
-        .btn-demo {
-            background: linear-gradient(135deg, #059669 0%, #047857 100%);
-            color: #fff;
-            box-shadow: 0 4px 14px rgba(5, 150, 105, 0.3);
-        }
-
         /* Badge */
         .badge-row {
             display: flex;
@@ -317,9 +311,6 @@
         <div class="hero-actions">
             <a href="{!installLinkProd}" class="btn btn-primary">Install Free</a>
             <a href="{!installLinkSandbox}" class="btn btn-secondary">Install in Sandbox</a>
-            <apex:outputPanel rendered="{!NOT(ISBLANK(demoUrl))}">
-                <a href="{!HTMLENCODE(demoUrl)}" target="_blank" class="btn btn-demo">Live Demo</a>
-            </apex:outputPanel>
         </div>
     </section>
 
