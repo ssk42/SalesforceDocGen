@@ -32,10 +32,10 @@ Scanned with `sf code-analyzer run --rule-selector "Security" --rule-selector "A
 **New install:**
 
 ```bash
-sf package install --package 04tal000006PMUvAAO --wait 10 --target-org <your-org>
+sf package install --package 04tal000006PcppAAC --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PMUvAAO) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PMUvAAO)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PcppAAC) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tal000006PcppAAC)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
