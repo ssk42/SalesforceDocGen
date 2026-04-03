@@ -255,7 +255,9 @@ Decompress → Merge XML tags → Recompress
 
 ---
 
-## Changelog
+## Releases
+
+DocGen ships on a **biweekly release cycle**. Next release: **April 17, 2026**.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
