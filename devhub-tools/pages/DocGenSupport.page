@@ -101,6 +101,7 @@
             <a href="/DocGenRoadmap">Roadmap</a>
             <a href="/DocGenCommunity">Community</a>
             <a href="https://github.com/Portwood-Global-Solutions/Portwood-DocGen">GitHub</a>
+            <a href="/DocGenSupport" style="color: #fbbf24;">Support the Project</a>
         </nav>
     </header>
 
@@ -111,33 +112,8 @@
         <p>DocGen is free because every nonprofit, every small business, and every org deserves great document generation. Whether you can pay or not, the product is yours. If you're able to give back, here's how a little goes a long way.</p>
     </section>
 
-    <!-- About Me -->
-    <section class="section">
-        <h2>The Story Behind DocGen</h2>
-        <p class="subtitle">Built by a Salesforce admin who believes it should all be in one system</p>
-
-        <div class="about-grid">
-            <!-- Photo: replace src with your family photo Static Resource or ContentVersion URL -->
-            <img src="{!URLFOR($Resource.FamilyPhoto)}" alt="The Moudy Family" class="about-photo" />
-
-            <div class="about-content">
-                <h3>Hey, I'm Dave.</h3>
-                <p>My Salesforce journey started with <span class="highlight">Pathfinder during Covid</span>. Like a lot of people in 2020, I was looking for a new direction. Salesforce gave me one.</p>
-                <p>I went after the developer certification first. <span class="highlight">I failed it. Multiple times.</span> Instead of pushing through, I went back and learned what I didn't know. I got my <span class="highlight">Admin cert</span> and started from there. That's where I think every Salesforce professional should start. Understand the platform before you try to code on it.</p>
-                <p>From there I ventured out into the broader world of tech. Different tools, different platforms, different ecosystems. And you know what I discovered? <span class="highlight">It can all be done on Salesforce.</span> So why not do it all in one system?</p>
-                <p>I've seen companies spend <span class="highlight">thousands upon thousands of dollars</span> on document generation. Enterprise licenses, per-user fees, add-on costs that pile up year after year. My goal is to bring that cost way, way down.</p>
-
-                <div class="cert-badges">
-                    <span class="cert-badge">Salesforce Pathfinder Alum</span>
-                    <span class="cert-badge">Certified Admin</span>
-                    <span class="cert-badge">Builder &amp; Maker</span>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <!-- Philosophy -->
-    <section class="section" style="padding-top: 0;">
+    <section class="section">
         <div class="philosophy">
             <h3>Pay What You Can</h3>
             <p>We know DocGen is a huge cost savings for your org. We want that to benefit <em>you</em>.</p>

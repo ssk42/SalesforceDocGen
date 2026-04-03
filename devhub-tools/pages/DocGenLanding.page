@@ -395,6 +395,7 @@
             <a href="/DocGenRoadmap">Roadmap</a>
             <a href="/DocGenCommunity">Community</a>
             <a href="https://github.com/Portwood-Global-Solutions/Portwood-DocGen">GitHub</a>
+            <a href="/DocGenSupport" style="color: #fbbf24;">Support the Project</a>
             <a href="javascript:void(0)" onclick="openInstallModal()" style="color: #60a5fa;">Install</a>
         </nav>
     </header>
