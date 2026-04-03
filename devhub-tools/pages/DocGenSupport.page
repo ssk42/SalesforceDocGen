@@ -171,11 +171,10 @@
 
     <!-- Support CTA -->
     <section class="support-cta">
-        <h2>Buy Amanda a Cup of Coffee</h2>
+        <h2>Support DocGen</h2>
         <p>Every dollar helps keep DocGen free, maintained, and improving. No amount is too small.</p>
-        <!-- TODO: Replace with your actual Buy Me a Coffee link -->
         <a href="https://buymeacoffee.com/portwooddocgen" class="btn-coffee">
-            Buy a Coffee
+            Buy Us a Coffee
         </a>
         <p style="margin-top: 1.5rem; font-size: 0.85rem; color: #475569;">And don't forget, <a href="https://www.circlesindy.org/donate" target="_blank">send the other half to Circles Indy</a>.</p>
     </section>
