@@ -258,6 +258,7 @@ private class DocGenControllerTests {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+            delete [SELECT Id FROM DocGen_Template_Version__c WHERE Template__c = :tpl.Id];
 
             // Create a version record
             DocGen_Template_Version__c v = new DocGen_Template_Version__c(

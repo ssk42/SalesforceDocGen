@@ -2003,7 +2003,7 @@ private class DocGenHtmlRendererTest {
         String html = DocGenHtmlRenderer.convertToHtml(xml);
         System.assert(html.contains('Arial Unicode MS'), 'RTL doc should use Arial Unicode MS');
         System.assert(html.contains('text-align: right'), 'RTL doc should be right-aligned');
-        System.assert(html.contains('<table'), 'Should contain table');
+        System.assertEquals('<table is present', html.contains('<table') ? '<table is present' : html, 'Should contain table');
         DocGenHtmlRenderer.stylesXml = null;
     }
 }

@@ -413,6 +413,34 @@ try {
 }
 
 // =====================================================================
+// 12. CONDITIONAL EXPRESSION TESTS
+// =====================================================================
+
+// Test 25: Boolean false hides content
+String boolFalseXml = '<w:t>{#IsActive}visible{/IsActive}</w:t>';
+Map<String, Object> boolFalseData = new Map<String, Object>{ 'IsActive' => false };
+String boolFalseResult = DocGenService.processXmlForTest(boolFalseXml, boolFalseData);
+if (!boolFalseResult.contains('visible')) { pass++; } else { fail++; System.debug('FAIL T25: Boolean false should hide content, got: ' + boolFalseResult); }
+
+// Test 26: Negation {^Field} shows when falsy
+String negXml = '<w:t>{^HasDiscount}No discount{/HasDiscount}</w:t>';
+Map<String, Object> negData = new Map<String, Object>{ 'HasDiscount' => false };
+String negResult = DocGenService.processXmlForTest(negXml, negData);
+if (negResult.contains('No discount')) { pass++; } else { fail++; System.debug('FAIL T26: Negation with false should show content, got: ' + negResult); }
+
+// Test 27: IF comparison {#IF Amount > 10000}
+String ifXml = '<w:t>{#IF Amount > 10000}Large deal{/IF}</w:t>';
+Map<String, Object> ifData = new Map<String, Object>{ 'Amount' => 50000 };
+String ifResult = DocGenService.processXmlForTest(ifXml, ifData);
+if (ifResult.contains('Large deal')) { pass++; } else { fail++; System.debug('FAIL T27: IF Amount > 10000 should show for 50000, got: ' + ifResult); }
+
+// Test 28: Else block {#IF Stage = 'Closed Won'}Won{:else}Open{/IF}
+String elseXml = '<w:t>{#IF Stage = \'Closed Won\'}Won{:else}Open{/IF}</w:t>';
+Map<String, Object> elseData = new Map<String, Object>{ 'Stage' => 'Prospecting' };
+String elseResult = DocGenService.processXmlForTest(elseXml, elseData);
+if (elseResult.contains('Open') && !elseResult.contains('Won')) { pass++; } else { fail++; System.debug('FAIL T28: IF else should show Open for non-matching stage, got: ' + elseResult); }
+
+// =====================================================================
 // RESULTS
 // =====================================================================
 
@@ -428,7 +456,8 @@ System.debug('  T10 Image CV access, T11 Doc generation, T12 Doc not empty,');
 System.debug('  T13 Image render size, T14 Junction stitching, T15 COUNT,');
 System.debug('  T16 SUM, T17 SUM:currency, T18 AVG, T19 MIN, T20 MAX,');
 System.debug('  T21 V4 provider doc gen, T22 V4 missing class error,');
-System.debug('  T23 Null parent lookup in loop, T24 Export/Import round-trip');
+System.debug('  T23 Null parent lookup in loop, T24 Export/Import round-trip,');
+System.debug('  T25 Bool false hides, T26 Negation, T27 IF comparison, T28 Else block');
 System.debug('  (Sample template tests: run scripts/e2e-sample-templates.apex)');
 
 // =====================================================================

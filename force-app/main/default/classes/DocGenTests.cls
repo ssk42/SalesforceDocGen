@@ -60,6 +60,7 @@ private class DocGenTests {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
 
             // 1. Setup - Create V1 Record
+            delete [SELECT Id FROM DocGen_Template_Version__c WHERE Template__c = :tpl.Id];
             ContentVersion cv1 = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Title = 'TestDoc' LIMIT 1];
 
             DocGen_Template_Version__c v1 = new DocGen_Template_Version__c(

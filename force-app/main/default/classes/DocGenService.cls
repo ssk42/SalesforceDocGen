@@ -28,6 +28,17 @@ public with sharing class DocGenService {
     };
 
     /**
+     * Parsed IF expression: field, operator, and comparison value.
+     */
+    private class IfExpression {
+        String fieldPath;
+        String operator;
+        String compareValue;
+        Boolean isString = false;
+        Boolean isBoolean = false;
+    }
+
+    /**
      * Creates an AuraHandledException with a user-facing message.
      * Centralizes exception creation for consistent error handling.
      */
@@ -1700,112 +1711,186 @@ public with sharing class DocGenService {
             
             if (tagContent.startsWith('#')) {
                 String key = tagContent.substring(1).trim();
+
+                // --- {#IF Field op Value} comparison conditional ---
+                if (key.length() > 3 && key.substring(0, 3).equalsIgnoreCase('IF ')) {
+                    String ifExpr = key.substring(3).trim();
+                    IfExpression expr = parseIfExpression(ifExpr);
+                    Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, 'IF');
+                    if (sectionEnd == -1) {
+                        throw new DocGenException(
+                            'Malformed IF tag: missing closing "{/IF}" for "{#' + key + '}".'
+                        );
+                    }
+                    Integer closeTagEnd = xml.indexOf('}', sectionEnd);
+                    String innerXml = xml.substring(tagClose + 1, sectionEnd);
+                    cursor = closeTagEnd + 1;
+
+                    // Split on {:else}
+                    Integer elsePos = findElseTag(innerXml);
+                    String trueXml = elsePos >= 0 ? innerXml.substring(0, elsePos) : innerXml;
+                    // Skip the {:else} tag itself (7 chars: {:else})
+                    Integer elseTagLen = 7;
+                    String falseXml = elsePos >= 0 ? innerXml.substring(elsePos + elseTagLen) : '';
+
+                    Object fieldValue = resolveValue(data, expr.fieldPath);
+                    Boolean condResult = evaluateComparison(fieldValue, expr);
+                    output += processXml(condResult ? trueXml : falseXml, data);
+
+                } else {
+                    // --- {#Field} loop/conditional ---
+                    Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
+                    if (sectionEnd == -1) {
+                        throw new DocGenException(
+                            'Malformed loop tag: missing closing "{/' + key + '}" for "{#' + key + '}".'
+                        );
+                    } else {
+                        // Default: Content between tags
+                        Integer contentStart = tagClose + 1;
+                        Integer contentEnd = sectionEnd;
+                        String innerXml = xml.substring(contentStart, contentEnd);
+
+                        // Smart container expansion: repeat the nearest parent container when possible.
+                        // Candidate containers:
+                        // 1) Table row (<w:tr>...</w:tr>)
+                        // 2) Numbered/bulleted paragraph (nearest <w:p> containing <w:numPr>)
+                        Integer closeTagEnd = xml.indexOf('}', sectionEnd);
+                        Integer chosenContainerStart = -1;
+                        Integer chosenContainerEnd = -1;
+
+                        // Candidate: row container
+                        Integer rowContainerStart = lastIndexOfTagStart(xml, 'w:tr', cursor);
+                        if (rowContainerStart != -1) {
+                            Integer rowContainerEnd = xml.indexOf('</w:tr>', rowContainerStart);
+                            Boolean rowClosedBeforeCursor = xml.substring(rowContainerStart, cursor).contains('</w:tr>');
+                            if (!rowClosedBeforeCursor && rowContainerEnd != -1 && rowContainerEnd > closeTagEnd) {
+                                chosenContainerStart = rowContainerStart;
+                                chosenContainerEnd = rowContainerEnd + 7; // </w:tr>
+                            }
+                        }
+
+                        // Candidate: list paragraph container (w:p with w:numPr)
+                        Integer numPropsStart = xml.lastIndexOf('<w:numPr', cursor);
+                        if (numPropsStart != -1) {
+                            Integer paragraphStart = lastIndexOfTagStart(xml, 'w:p', cursor);
+                            if (paragraphStart != -1 && paragraphStart <= numPropsStart) {
+                                Integer paragraphEndStart = xml.indexOf('</w:p>', paragraphStart);
+                                Boolean paragraphClosedBeforeCursor = xml.substring(paragraphStart, cursor).contains('</w:p>');
+                                if (!paragraphClosedBeforeCursor && paragraphEndStart != -1 && paragraphEndStart > closeTagEnd && numPropsStart < paragraphEndStart) {
+                                    Integer paragraphContainerEnd = paragraphEndStart + 6; // </w:p>
+                                    // Prefer the closest valid parent.
+                                    if (chosenContainerStart == -1 || paragraphStart > chosenContainerStart) {
+                                        chosenContainerStart = paragraphStart;
+                                        chosenContainerEnd = paragraphContainerEnd;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (chosenContainerStart != -1 && chosenContainerEnd != -1) {
+                            contentStart = chosenContainerStart;
+                            contentEnd = chosenContainerEnd;
+                            innerXml = xml.substring(contentStart, contentEnd);
+
+                            String startTagFull = '{' + rawTag + '}';
+                            innerXml = innerXml.replace(startTagFull, '');
+
+                            String endTagFull = xml.substring(sectionEnd, closeTagEnd + 1);
+                            innerXml = innerXml.replace(endTagFull, '');
+
+                            // Backtrack output to remove already-emitted prefix for chosen container.
+                            Integer overlap = cursor - contentStart;
+                            if (overlap > 0) {
+                                Integer outputLength = output.length();
+                                if (overlap > outputLength) {
+                                    throw new DocGenException(
+                                        'Template loop parsing error for "{#' + key + '}": internal overlap (' + overlap +
+                                        ') exceeds output length (' + outputLength + '). ' +
+                                        'This usually indicates malformed or mismatched loop tags (missing "{/' + key + '}").'
+                                    );
+                                }
+                                output = output.substring(0, outputLength - overlap);
+                            }
+                            cursor = contentEnd;
+                        } else {
+                            // Fallback behavior: keep default content-only repetition.
+                            cursor = closeTagEnd + 1;
+                        }
+
+                        // Split on {:else}
+                        Integer elsePos = findElseTag(innerXml);
+                        String trueXml = elsePos >= 0 ? innerXml.substring(0, elsePos) : innerXml;
+                        Integer elseTagLen = 7; // {:else}
+                        String falseXml = elsePos >= 0 ? innerXml.substring(elsePos + elseTagLen) : '';
+
+                        // Process Data
+                        Object val = resolveValue(data, key);
+                        String sectionResult = '';
+                        if (val instanceof Boolean && (Boolean)val) {
+                             sectionResult = processXml(trueXml, data);
+                        } else if (val instanceof Boolean && !(Boolean)val) {
+                             sectionResult = processXml(falseXml, data);
+                        } else if (val instanceof Map<String, Object>) {
+                            Map<String, Object> mapVal = (Map<String, Object>) val;
+                            if (mapVal.containsKey('records') && mapVal.get('records') instanceof List<Object>) {
+                                List<Object> records = (List<Object>) mapVal.get('records');
+                                if (!records.isEmpty()) {
+                                    for (Object item : records) {
+                                        if (item instanceof Map<String, Object>) {
+                                            sectionResult += processXml(trueXml, (Map<String, Object>) item);
+                                        }
+                                    }
+                                } else {
+                                    sectionResult = processXml(falseXml, data);
+                                }
+                            } else {
+                                 sectionResult = processXml(trueXml, mapVal);
+                            }
+                        } else if (val instanceof List<Object>) {
+                             List<Object> listVal = (List<Object>) val;
+                             if (!listVal.isEmpty()) {
+                                 for (Object item : listVal) {
+                                      if (item instanceof Map<String, Object>) { sectionResult += processXml(trueXml, (Map<String, Object>) item); }
+                                 }
+                             } else {
+                                 sectionResult = processXml(falseXml, data);
+                             }
+                        } else if (val != null) {
+                             sectionResult = processXml(trueXml, data);
+                        } else {
+                             sectionResult = processXml(falseXml, data);
+                        }
+                        output += sectionResult;
+                    }
+                }
+
+            } else if (tagContent.startsWith('^')) {
+                // --- {^Field} negation conditional: show when falsy ---
+                String key = tagContent.substring(1).trim();
+                // Closing tag is {/Field} (no ^ prefix)
                 Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
                 if (sectionEnd == -1) {
                     throw new DocGenException(
-                        'Malformed loop tag: missing closing "{/' + key + '}" for "{#' + key + '}".'
+                        'Malformed negation tag: missing closing "{/' + key + '}" for "{^' + key + '}".'
                     );
-                } else {
-                    // Default: Content between tags
-                    Integer contentStart = tagClose + 1;
-                    Integer contentEnd = sectionEnd;
-                    String innerXml = xml.substring(contentStart, contentEnd);
-                    
-                    // Smart container expansion: repeat the nearest parent container when possible.
-                    // Candidate containers:
-                    // 1) Table row (<w:tr>...</w:tr>)
-                    // 2) Numbered/bulleted paragraph (nearest <w:p> containing <w:numPr>)
-                    Integer closeTagEnd = xml.indexOf('}', sectionEnd);
-                    Integer chosenContainerStart = -1;
-                    Integer chosenContainerEnd = -1;
-
-                    // Candidate: row container
-                    Integer rowContainerStart = lastIndexOfTagStart(xml, 'w:tr', cursor);
-                    if (rowContainerStart != -1) {
-                        Integer rowContainerEnd = xml.indexOf('</w:tr>', rowContainerStart);
-                        Boolean rowClosedBeforeCursor = xml.substring(rowContainerStart, cursor).contains('</w:tr>');
-                        if (!rowClosedBeforeCursor && rowContainerEnd != -1 && rowContainerEnd > closeTagEnd) {
-                            chosenContainerStart = rowContainerStart;
-                            chosenContainerEnd = rowContainerEnd + 7; // </w:tr>
-                        }
-                    }
-
-                    // Candidate: list paragraph container (w:p with w:numPr)
-                    Integer numPropsStart = xml.lastIndexOf('<w:numPr', cursor);
-                    if (numPropsStart != -1) {
-                        Integer paragraphStart = lastIndexOfTagStart(xml, 'w:p', cursor);
-                        if (paragraphStart != -1 && paragraphStart <= numPropsStart) {
-                            Integer paragraphEndStart = xml.indexOf('</w:p>', paragraphStart);
-                            Boolean paragraphClosedBeforeCursor = xml.substring(paragraphStart, cursor).contains('</w:p>');
-                            if (!paragraphClosedBeforeCursor && paragraphEndStart != -1 && paragraphEndStart > closeTagEnd && numPropsStart < paragraphEndStart) {
-                                Integer paragraphContainerEnd = paragraphEndStart + 6; // </w:p>
-                                // Prefer the closest valid parent.
-                                if (chosenContainerStart == -1 || paragraphStart > chosenContainerStart) {
-                                    chosenContainerStart = paragraphStart;
-                                    chosenContainerEnd = paragraphContainerEnd;
-                                }
-                            }
-                        }
-                    }
-
-                    if (chosenContainerStart != -1 && chosenContainerEnd != -1) {
-                        contentStart = chosenContainerStart;
-                        contentEnd = chosenContainerEnd;
-                        innerXml = xml.substring(contentStart, contentEnd);
-
-                        String startTagFull = '{' + rawTag + '}';
-                        innerXml = innerXml.replace(startTagFull, '');
-
-                        String endTagFull = xml.substring(sectionEnd, closeTagEnd + 1);
-                        innerXml = innerXml.replace(endTagFull, '');
-
-                        // Backtrack output to remove already-emitted prefix for chosen container.
-                        Integer overlap = cursor - contentStart;
-                        if (overlap > 0) {
-                            Integer outputLength = output.length();
-                            if (overlap > outputLength) {
-                                throw new DocGenException(
-                                    'Template loop parsing error for "{#' + key + '}": internal overlap (' + overlap +
-                                    ') exceeds output length (' + outputLength + '). ' +
-                                    'This usually indicates malformed or mismatched loop tags (missing "{/' + key + '}").'
-                                );
-                            }
-                            output = output.substring(0, outputLength - overlap);
-                        }
-                        cursor = contentEnd;
-                    } else {
-                        // Fallback behavior: keep default content-only repetition.
-                        cursor = closeTagEnd + 1;
-                    }
-
-                    // Process Data
-                    Object val = resolveValue(data, key);
-                    String sectionResult = '';
-                    if (val instanceof Boolean && (Boolean)val) {
-                         sectionResult = processXml(innerXml, data);
-                    } else if (val instanceof Map<String, Object>) {
-                        Map<String, Object> mapVal = (Map<String, Object>) val;
-                        if (mapVal.containsKey('records') && mapVal.get('records') instanceof List<Object>) {
-                            List<Object> records = (List<Object>) mapVal.get('records');
-                            for (Object item : records) {
-                                if (item instanceof Map<String, Object>) {
-                                    sectionResult += processXml(innerXml, (Map<String, Object>) item);
-                                }
-                            }
-                        } else {
-                             sectionResult = processXml(innerXml, mapVal);
-                        }
-                    } else if (val instanceof List<Object>) {
-                         List<Object> listVal = (List<Object>) val;
-                         for (Object item : listVal) {
-                              if (item instanceof Map<String, Object>) { sectionResult += processXml(innerXml, (Map<String, Object>) item); }
-                         }
-                    } else if (val != null) {
-                         sectionResult = processXml(innerXml, data);
-                    }
-                    output += sectionResult;
                 }
-                
+                Integer closeTagEnd = xml.indexOf('}', sectionEnd);
+                String innerXml = xml.substring(tagClose + 1, sectionEnd);
+                cursor = closeTagEnd + 1;
+
+                // Split on {:else}
+                Integer elsePos = findElseTag(innerXml);
+                String trueXml = elsePos >= 0 ? innerXml.substring(0, elsePos) : innerXml;
+                Integer elseTagLen = 7; // {:else}
+                String falseXml = elsePos >= 0 ? innerXml.substring(elsePos + elseTagLen) : '';
+
+                Object val = resolveValue(data, key);
+                if (isFalsy(val)) {
+                    output += processXml(trueXml, data);
+                } else {
+                    output += processXml(falseXml, data);
+                }
+
             } else if (tagContent.startsWith('/')) {
                 output += '{' + rawTag + '}';
                 cursor = tagClose + 1;
@@ -1916,7 +2001,10 @@ public with sharing class DocGenService {
                 return -1;
             }
             String content = xml.substring(nextStart + 1, nextClose).trim();
-            if (content.equals('#' + key)) {
+            // Depth openers: {#key}, {^key}, or {#IF ...} (prefix match for IF blocks)
+            if (content.equals('#' + key) || content.equals('^' + key)) {
+                depth++;
+            } else if (key == 'IF' && content.length() > 3 && content.substring(0, 3).equalsIgnoreCase('#IF') && content.substring(3, 4) == ' ') {
                 depth++;
             }
             else if (content.equals('/' + key)) {
@@ -1928,6 +2016,187 @@ public with sharing class DocGenService {
             cursor = nextClose + 1;
         }
         return -1;
+    }
+
+    /**
+     * Finds the position of a {:else} tag at depth 0 within innerXml.
+     * Skips {:else} tags that belong to nested conditional/loop blocks.
+     * Returns -1 if no else tag found at the top level.
+     */
+    private static Integer findElseTag(String innerXml) {
+        Integer depth = 0;
+        Integer cursor = 0;
+        while (cursor < innerXml.length()) {
+            Integer nextStart = innerXml.indexOf('{', cursor);
+            if (nextStart == -1) {
+                return -1;
+            }
+            Integer nextClose = innerXml.indexOf('}', nextStart);
+            if (nextClose == -1) {
+                return -1;
+            }
+            String content = innerXml.substring(nextStart + 1, nextClose).trim();
+            if (content.startsWith('#') || content.startsWith('^')) {
+                depth++;
+            } else if (content.startsWith('/')) {
+                depth--;
+            } else if (depth == 0 && content == ':else') {
+                return nextStart;
+            }
+            cursor = nextClose + 1;
+        }
+        return -1;
+    }
+
+    /**
+     * Returns true if the value is "falsy": null, boolean false, blank string,
+     * numeric zero, empty List, or Map with empty records list.
+     */
+    private static Boolean isFalsy(Object val) {
+        if (val == null) {
+            return true;
+        }
+        if (val instanceof Boolean) {
+            return !(Boolean) val;
+        }
+        if (val instanceof String) {
+            return String.isBlank((String) val);
+        }
+        if (val instanceof Decimal) {
+            return (Decimal) val == 0;
+        }
+        if (val instanceof Integer) {
+            return (Integer) val == 0;
+        }
+        if (val instanceof Long) {
+            return (Long) val == 0;
+        }
+        if (val instanceof Double) {
+            return (Double) val == 0;
+        }
+        if (val instanceof List<Object>) {
+            return ((List<Object>) val).isEmpty();
+        }
+        if (val instanceof Map<String, Object>) {
+            Map<String, Object> mapVal = (Map<String, Object>) val;
+            if (mapVal.containsKey('records') && mapVal.get('records') instanceof List<Object>) {
+                return ((List<Object>) mapVal.get('records')).isEmpty();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Parses an IF expression string like "Amount > 10000" or "Stage = 'Closed Won'".
+     * Unescapes XML entities first since Word may encode operators.
+     */
+    private static IfExpression parseIfExpression(String expr) {
+        // Unescape XML entities — Word encodes < and > in <w:t> text
+        expr = expr.replace('&gt;', '>').replace('&lt;', '<')
+                   .replace('&amp;', '&').replace('&apos;', '\'').replace('&quot;', '"');
+
+        IfExpression result = new IfExpression();
+
+        // Find the operator by scanning for the first operator character after the field name
+        // Operators: >=, <=, !=, =, >, <
+        Integer i = 0;
+        // Skip leading whitespace
+        while (i < expr.length() && expr.substring(i, i + 1) == ' ') { i++; }
+        // Read field name (until space or operator char)
+        Integer fieldStart = i;
+        while (i < expr.length()) {
+            String ch = expr.substring(i, i + 1);
+            if (ch == ' ' || ch == '>' || ch == '<' || ch == '=' || ch == '!') {
+                break;
+            }
+            i++;
+        }
+        result.fieldPath = expr.substring(fieldStart, i).trim();
+
+        // Skip whitespace
+        while (i < expr.length() && expr.substring(i, i + 1) == ' ') { i++; }
+
+        // Read operator
+        Integer opStart = i;
+        String ch = i < expr.length() ? expr.substring(i, i + 1) : '';
+        if ((ch == '>' || ch == '<' || ch == '!') && (i + 1) < expr.length() && expr.substring(i + 1, i + 2) == '=') {
+            i += 2;
+        } else if (ch == '>' || ch == '<' || ch == '=') {
+            i += 1;
+        }
+        result.operator = expr.substring(opStart, i).trim();
+
+        // Skip whitespace
+        while (i < expr.length() && expr.substring(i, i + 1) == ' ') { i++; }
+
+        // Read value — single-quoted string, boolean, or number
+        String valueStr = expr.substring(i).trim();
+        if (valueStr.startsWith('\'') && valueStr.endsWith('\'') && valueStr.length() >= 2) {
+            result.compareValue = valueStr.substring(1, valueStr.length() - 1);
+            result.isString = true;
+        } else if (valueStr.equalsIgnoreCase('true') || valueStr.equalsIgnoreCase('false')) {
+            result.compareValue = valueStr.toLowerCase();
+            result.isBoolean = true;
+        } else {
+            result.compareValue = valueStr;
+        }
+        return result;
+    }
+
+    /**
+     * Evaluates a comparison between a field value and an IF expression.
+     * Returns true if the comparison holds.
+     */
+    private static Boolean evaluateComparison(Object fieldValue, IfExpression expr) {
+        if (fieldValue == null) {
+            // null compared to anything: only != is true, = is false
+            if (expr.operator == '=') { return false; }
+            if (expr.operator == '!=') { return true; }
+            return false;
+        }
+
+        if (expr.isBoolean) {
+            Boolean fieldBool = false;
+            if (fieldValue instanceof Boolean) {
+                fieldBool = (Boolean) fieldValue;
+            } else {
+                fieldBool = String.valueOf(fieldValue).equalsIgnoreCase('true');
+            }
+            Boolean compareBool = expr.compareValue == 'true';
+            return applyOperator(fieldBool == compareBool ? 0 : 1, expr.operator);
+        }
+
+        String fieldStr = String.valueOf(fieldValue);
+
+        if (expr.isString) {
+            Integer cmp = fieldStr.compareTo(expr.compareValue);
+            return applyOperator(cmp, expr.operator);
+        }
+
+        // Try numeric comparison
+        try {
+            Decimal fieldNum = Decimal.valueOf(fieldStr);
+            Decimal compareNum = Decimal.valueOf(expr.compareValue);
+            Integer cmp = fieldNum == compareNum ? 0 : (fieldNum > compareNum ? 1 : -1);
+            return applyOperator(cmp, expr.operator);
+        } catch (Exception e) {
+            // Fall back to string comparison
+            Integer cmp = fieldStr.compareTo(expr.compareValue);
+            return applyOperator(cmp, expr.operator);
+        }
+    }
+
+    /**
+     * Maps a compareTo result (negative/zero/positive) to a boolean based on the operator.
+     */
+    private static Boolean applyOperator(Integer cmp, String op) {
+        if (op == '=') { return cmp == 0; }
+        if (op == '!=') { return cmp != 0; }
+        if (op == '>') { return cmp > 0; }
+        if (op == '<') { return cmp < 0; }
+        if (op == '>=') { return cmp >= 0; }
+        if (op == '<=') { return cmp <= 0; }
+        return false;
     }
 
     private static Integer lastIndexOfTagStart(String xml, String tagName, Integer fromIndex) {

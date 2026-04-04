@@ -286,10 +286,10 @@ public class TestDataFactory {
             '<w:body>' +
             // RTL paragraph with Hebrew text
             '<w:p><w:pPr><w:bidi/><w:jc w:val="right"/></w:pPr>' +
-            '<w:r><w:rPr><w:rtl/><w:rFonts w:cs="David"/></w:rPr><w:t>\u05E9\u05DC\u05D5\u05DD \u05E2\u05D5\u05DC\u05DD</w:t></w:r></w:p>' +
+            '<w:r><w:rPr><w:rtl/><w:rFonts w:cs="David"/></w:rPr><w:t>RTL HELLO WORLD</w:t></w:r></w:p>' +
             // Mixed: Hebrew label + English merge value
             '<w:p><w:pPr><w:bidi/></w:pPr>' +
-            '<w:r><w:rPr><w:rtl/></w:rPr><w:t>\u05E9\u05DD:</w:t></w:r>' +
+            '<w:r><w:rPr><w:rtl/></w:rPr><w:t>NAME:</w:t></w:r>' +
             '<w:r><w:t>{Name}</w:t></w:r></w:p>' +
             // RTL table with bidiVisual
             '<w:tbl><w:tblPr><w:bidiVisual/><w:tblBorders>' +
@@ -297,8 +297,8 @@ public class TestDataFactory {
             '<w:bottom w:val="single" w:sz="4" w:color="000000"/>' +
             '</w:tblBorders></w:tblPr>' +
             '<w:tr>' +
-            '<w:tc><w:p><w:r><w:rPr><w:rtl/></w:rPr><w:t>\u05E2\u05DE\u05D5\u05D3\u05D4 1</w:t></w:r></w:p></w:tc>' +
-            '<w:tc><w:p><w:r><w:rPr><w:rtl/></w:rPr><w:t>\u05E2\u05DE\u05D5\u05D3\u05D4 2</w:t></w:r></w:p></w:tc>' +
+            '<w:tc><w:p><w:r><w:rPr><w:rtl/></w:rPr><w:t>COL 1</w:t></w:r></w:p></w:tc>' +
+            '<w:tc><w:p><w:r><w:rPr><w:rtl/></w:rPr><w:t>COL 2</w:t></w:r></w:p></w:tc>' +
             '</w:tr></w:tbl>' +
             '</w:body></w:document>';
     }

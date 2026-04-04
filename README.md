@@ -56,7 +56,10 @@ Word is the most capable — it's the only format that supports images, barcodes
 | `{FieldName}` | Insert a field value | `{Name}`, `{Email}`, `{Phone}` |
 | `{Parent.Field}` | Pull from a related record | `{Account.Name}`, `{Owner.Email}` |
 | `{#ChildList}...{/ChildList}` | Repeat for each child record | `{#Contacts}{FirstName}{/Contacts}` |
-| `{#BoolField}...{/BoolField}` | Show/hide based on checkbox | `{#IsActive}Active member{/IsActive}` |
+| `{#BoolField}...{/BoolField}` | Show when truthy (true, non-null, non-empty) | `{#IsActive}Active member{/IsActive}` |
+| `{^Field}...{/Field}` | Show when falsy (false, null, empty, zero) | `{^HasDiscount}No discount{/HasDiscount}` |
+| `{#IF Field op Value}...{/IF}` | Comparison conditional (`=`, `!=`, `>`, `<`, `>=`, `<=`) | `{#IF Amount > 10000}Large deal{/IF}` |
+| `{:else}` | Else block in any conditional | `{#IsVIP}VIP{:else}Standard{/IsVIP}` |
 | `{RichTextField}` | Rich text with formatting and images | `{Description}` renders bold, italic, lists |
 
 ### Formatting

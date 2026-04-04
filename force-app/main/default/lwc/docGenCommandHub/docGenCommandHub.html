@@ -162,7 +162,10 @@
                                         <tbody>
                                             <tr><td><strong>Merge Field</strong></td><td>Pulls from the base record or parent lookup.</td><td><code>&#123;Account.Name&#125;</code></td></tr>
                                             <tr><td><strong>Child Loop</strong></td><td>Repeats content for every record in a related list.</td><td><code>&#123;#Contacts&#125;...&#123;/Contacts&#125;</code></td></tr>
-                                            <tr><td><strong>Conditional</strong></td><td>Shows content only if a checkbox is checked.</td><td><code>&#123;#IsVIP&#125;Show Me!&#123;/IsVIP&#125;</code></td></tr>
+                                            <tr><td><strong>Conditional</strong></td><td>Shows content when truthy (true, non-null, non-empty).</td><td><code>&#123;#IsVIP&#125;Welcome, VIP!&#123;/IsVIP&#125;</code></td></tr>
+                                            <tr><td><strong>Negation</strong></td><td>Shows content when falsy (false, null, empty, zero).</td><td><code>&#123;^HasDiscount&#125;No discount&#123;/HasDiscount&#125;</code></td></tr>
+                                            <tr><td><strong>Comparison</strong></td><td>Shows content when a field matches a condition.</td><td><code>&#123;#IF Amount &gt; 10000&#125;Large deal&#123;/IF&#125;</code></td></tr>
+                                            <tr><td><strong>Else Block</strong></td><td>Alternative content for any conditional.</td><td><code>&#123;#IsVIP&#125;VIP&#123;:else&#125;Standard&#123;/IsVIP&#125;</code></td></tr>
                                             <tr><td><strong>Aggregates</strong></td><td>Compute totals outside of a loop block.</td><td><code>&#123;SUM:Items.TotalPrice&#125;</code></td></tr>
                                         </tbody>
                                     </table>
