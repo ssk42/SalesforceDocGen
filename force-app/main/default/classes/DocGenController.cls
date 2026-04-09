@@ -831,6 +831,17 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     @AuraEnabled
     public static void saveTemplate(Map<String, Object> fields, Boolean createVersion) {
+        saveTemplate(fields, createVersion, null);
+    }
+
+    /**
+     * Saves template field updates and optionally creates a new template version.
+     * @param fields Map of field API names to values for the template record
+     * @param createVersion Whether to create a new active version snapshot
+     * @param contentVersionId The specific ContentVersion ID from the file upload event (optional)
+     */
+    @AuraEnabled
+    public static void saveTemplate(Map<String, Object> fields, Boolean createVersion, String contentVersionId) {
         try {
             // 1. Update Template
             Id templateId = (Id) fields.get('Id');
@@ -886,18 +897,20 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     update activeVersions; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
                 }
 
-                // Get latest ContentVersionId
-                List<ContentDocumentLink> links = [
-                    SELECT ContentDocument.LatestPublishedVersionId
-                    FROM ContentDocumentLink
-                    WHERE LinkedEntityId = :templateId
-                    WITH USER_MODE ORDER BY ContentDocument.CreatedDate DESC // NOPMD — internal template file lookup
-                    LIMIT 1
-                ];
-
-                String cvId = null;
-                if (!links.isEmpty()) {
-                    cvId = links[0].ContentDocument.LatestPublishedVersionId;
+                // Use the specific ContentVersion ID from the upload event if provided,
+                // otherwise fall back to the latest published version of the most recently linked document.
+                String cvId = contentVersionId;
+                if (String.isBlank(cvId)) {
+                    List<ContentDocumentLink> links = [
+                        SELECT ContentDocument.LatestPublishedVersionId
+                        FROM ContentDocumentLink
+                        WHERE LinkedEntityId = :templateId
+                        WITH USER_MODE ORDER BY ContentDocument.CreatedDate DESC // NOPMD — internal template file lookup
+                        LIMIT 1
+                    ];
+                    if (!links.isEmpty()) {
+                        cvId = links[0].ContentDocument.LatestPublishedVersionId;
+                    }
                 }
 
                 DocGen_Template_Version__c version = new DocGen_Template_Version__c();

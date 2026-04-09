@@ -1579,7 +1579,7 @@ public with sharing class DocGenService {
      */
     private static String mergeRunsInTags(String xml) {
         // 1. Find all <w:t...>text</w:t> elements and their text content positions
-        Pattern wtPattern = Pattern.compile('<w:t(?:\\s[^>]*)?>([^<]*)</w:t>');
+        Pattern wtPattern = Pattern.compile('<[wa]:t(?:\\s[^>]*)?>([^<]*)</[wa]:t>');
         Matcher m = wtPattern.matcher(xml);
 
         List<Integer> contentStarts = new List<Integer>();
@@ -1700,6 +1700,27 @@ public with sharing class DocGenService {
             
             if (tagContent.startsWith('#')) {
                 String key = tagContent.substring(1).trim();
+                // {#IF ...} comparison conditional — handled separately
+                if (key.startsWithIgnoreCase('IF ')) {
+                    String expression = key.substring(3).trim();
+                    Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, 'IF');
+                    if (sectionEnd == -1) {
+                        throw new DocGenException('Malformed conditional: missing "{/IF}" for "{#IF ' + expression + '}".');
+                    }
+                    Integer closeTagEnd = xml.indexOf('}', sectionEnd);
+                    String innerXml = xml.substring(tagClose + 1, sectionEnd);
+                    String trueBranch = innerXml;
+                    String elseBranch = '';
+                    Integer elseIdx = innerXml.indexOf('{:else}');
+                    if (elseIdx != -1) {
+                        trueBranch = innerXml.substring(0, elseIdx);
+                        elseBranch = innerXml.substring(elseIdx + 7);
+                    }
+                    Boolean condResult = evaluateIfExpression(expression, data);
+                    output += processXml(condResult ? trueBranch : elseBranch, data);
+                    cursor = closeTagEnd + 1;
+                    continue;
+                }
                 Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
                 if (sectionEnd == -1) {
                     throw new DocGenException(
@@ -1710,6 +1731,13 @@ public with sharing class DocGenService {
                     Integer contentStart = tagClose + 1;
                     Integer contentEnd = sectionEnd;
                     String innerXml = xml.substring(contentStart, contentEnd);
+                    // Extract {:else} branch if present (only for boolean/truthy checks, not loops)
+                    String elseBranchStr = '';
+                    Integer elseTagIdx = innerXml.indexOf('{:else}');
+                    if (elseTagIdx != -1) {
+                        elseBranchStr = innerXml.substring(elseTagIdx + 7);
+                        innerXml = innerXml.substring(0, elseTagIdx);
+                    }
                     
                     // Smart container expansion: repeat the nearest parent container when possible.
                     // Candidate containers:
@@ -1781,8 +1809,12 @@ public with sharing class DocGenService {
                     // Process Data
                     Object val = resolveValue(data, key);
                     String sectionResult = '';
-                    if (val instanceof Boolean && (Boolean)val) {
-                         sectionResult = processXml(innerXml, data);
+                    if (val instanceof Boolean) {
+                        if ((Boolean)val) {
+                            sectionResult = processXml(innerXml, data);
+                        } else if (String.isNotBlank(elseBranchStr)) {
+                            sectionResult = processXml(elseBranchStr, data);
+                        }
                     } else if (val instanceof Map<String, Object>) {
                         Map<String, Object> mapVal = (Map<String, Object>) val;
                         if (mapVal.containsKey('records') && mapVal.get('records') instanceof List<Object>) {
@@ -1800,8 +1832,11 @@ public with sharing class DocGenService {
                          for (Object item : listVal) {
                               if (item instanceof Map<String, Object>) { sectionResult += processXml(innerXml, (Map<String, Object>) item); }
                          }
-                    } else if (val != null) {
-                         sectionResult = processXml(innerXml, data);
+                    } else if (val != null && !(val instanceof Boolean)) {
+                        // Non-null, non-boolean, non-list, non-map — treat as truthy
+                        sectionResult = processXml(innerXml, data);
+                    } else if (val == null && String.isNotBlank(elseBranchStr)) {
+                        sectionResult = processXml(elseBranchStr, data);
                     }
                     output += sectionResult;
                 }
@@ -1809,6 +1844,31 @@ public with sharing class DocGenService {
             } else if (tagContent.startsWith('/')) {
                 output += '{' + rawTag + '}';
                 cursor = tagClose + 1;
+            } else if (tagContent.startsWith('^')) {
+                // Inverse conditional: {^Field}...content shown when Field is falsy...{/Field}
+                String key = tagContent.substring(1).trim();
+                Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
+                if (sectionEnd == -1) {
+                    throw new DocGenException(
+                        'Malformed inverse tag: missing closing "{/' + key + '}" for "{^' + key + '}".'
+                    );
+                }
+                Integer closeTagEnd = xml.indexOf('}', sectionEnd);
+                String innerXml = xml.substring(tagClose + 1, sectionEnd);
+                String trueBranch = innerXml;
+                String elseBranch = '';
+                Integer elseIdx = innerXml.indexOf('{:else}');
+                if (elseIdx != -1) {
+                    trueBranch = innerXml.substring(0, elseIdx);
+                    elseBranch = innerXml.substring(elseIdx + 7);
+                }
+                Object val = resolveValue(data, key);
+                Boolean isFalsy = val == null
+                    || (val instanceof Boolean && !(Boolean)val)
+                    || (val instanceof String && String.isBlank((String)val))
+                    || (val instanceof List<Object> && ((List<Object>)val).isEmpty());
+                output += processXml(isFalsy ? trueBranch : elseBranch, data);
+                cursor = closeTagEnd + 1;
             } else if (tagContent.startsWith('%')) {
                 // Image tag: {%FieldName} or {%FieldName:WxH}
                 // PowerPoint: skip image injection (Word-specific DrawingML corrupts PPTX)
@@ -1863,7 +1923,10 @@ public with sharing class DocGenService {
                 if (val != null) {
                     String strVal;
                     // Apply formatting if a format specifier was provided
-                    if (dateFormat != null && val instanceof DateTime) {
+                    if (dateFormat != null && dateFormat.equalsIgnoreCase('checkbox')) {
+                        Boolean boolVal = val instanceof Boolean ? (Boolean)val : String.valueOf(val).equalsIgnoreCase('true');
+                        strVal = boolVal ? '[X]' : '[ ]';
+                    } else if (dateFormat != null && val instanceof DateTime) {
                         strVal = ((DateTime) val).format(dateFormat);
                     } else if (dateFormat != null && val instanceof Date) {
                         DateTime dt = DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
@@ -1916,7 +1979,7 @@ public with sharing class DocGenService {
                 return -1;
             }
             String content = xml.substring(nextStart + 1, nextClose).trim();
-            if (content.equals('#' + key)) {
+            if (content.equals('#' + key) || content.equals('^' + key)) {
                 depth++;
             }
             else if (content.equals('/' + key)) {
@@ -1928,6 +1991,54 @@ public with sharing class DocGenService {
             cursor = nextClose + 1;
         }
         return -1;
+    }
+
+    /**
+     * Evaluates a comparison expression like "Field op Value" using data map values.
+     * Supported operators: =, !=, >, <, >=, <=
+     */
+    private static Boolean evaluateIfExpression(String expression, Map<String, Object> data) {
+        // Check operators longest-first to avoid partial matches (e.g. >= before >)
+        List<String> operators = new List<String>{ '!=', '>=', '<=', '=', '>', '<' };
+        for (String op : operators) {
+            Integer opIdx = expression.indexOf(op);
+            if (opIdx == -1) {
+                continue;
+            }
+            String fieldPart = expression.substring(0, opIdx).trim();
+            String valuePart = expression.substring(opIdx + op.length()).trim();
+            // Strip surrounding single quotes from string literal
+            if (valuePart.startsWith('\'') && valuePart.endsWith('\'')) {
+                valuePart = valuePart.substring(1, valuePart.length() - 1);
+            }
+            Object fieldObj = resolveValue(data, fieldPart);
+            String fieldStr = fieldObj == null ? '' : String.valueOf(fieldObj);
+            // Try numeric comparison first, fall back to string
+            Decimal fieldNum = null;
+            Decimal valueNum = null;
+            try {
+                fieldNum = Decimal.valueOf(fieldStr);
+                valueNum = Decimal.valueOf(valuePart);
+            } catch (Exception e) {
+                String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+            }
+            if (fieldNum != null && valueNum != null) {
+                if (op == '=')  { return fieldNum == valueNum; }
+                if (op == '!=') { return fieldNum != valueNum; }
+                if (op == '>')  { return fieldNum > valueNum; }
+                if (op == '<')  { return fieldNum < valueNum; }
+                if (op == '>=') { return fieldNum >= valueNum; }
+                if (op == '<=') { return fieldNum <= valueNum; }
+            } else {
+                if (op == '=')  { return fieldStr == valuePart; }
+                if (op == '!=') { return fieldStr != valuePart; }
+                if (op == '>')  { return fieldStr > valuePart; }
+                if (op == '<')  { return fieldStr < valuePart; }
+                if (op == '>=') { return fieldStr >= valuePart; }
+                if (op == '<=') { return fieldStr <= valuePart; }
+            }
+        }
+        return false;
     }
 
     private static Integer lastIndexOfTagStart(String xml, String tagName, Integer fromIndex) {

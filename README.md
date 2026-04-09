@@ -211,6 +211,7 @@ These are Salesforce platform limitations, not DocGen bugs:
 | SmartArt and charts | Not rendered in the HTML conversion | Insert as images in your template |
 | Clickable hyperlinks | PDF renderer outputs styled text, not links | Links work in DOCX |
 | CSS Grid / Flexbox | The PDF renderer supports CSS 2.1 only | Use tables |
+| Multi-column layouts | CSS columns not supported by the PDF engine | Use tables for column layouts |
 | JavaScript | Ignored by the renderer | N/A |
 | Even/odd page headers | Not currently supported | Same header on all pages |
 | Multiple section headers | One header/footer set per document | Use page breaks, not section-specific headers |

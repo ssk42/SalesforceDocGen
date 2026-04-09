@@ -131,6 +131,7 @@ const VERSION_COLUMNS = [
 
     @track currentFileId;
     @track uploadedFileName = '';
+    @track uploadedContentVersionId = null;
 
     // Preview/Restore State
     @track isPreviewModalOpen = false;
@@ -1413,7 +1414,7 @@ const VERSION_COLUMNS = [
         };
 
         try {
-            await saveTemplate({ fields: fields, createVersion: false });
+            await saveTemplate({ fields: fields, createVersion: false, contentVersionId: this.uploadedContentVersionId });
             this.showToast('Success', 'Template Details saved.', 'success');
             return refreshApex(this.wiredTemplatesResult);
         } catch (error) {
@@ -1442,7 +1443,7 @@ const VERSION_COLUMNS = [
         };
 
         try {
-            await saveTemplate({ fields: fields, createVersion: true });
+            await saveTemplate({ fields: fields, createVersion: true, contentVersionId: this.uploadedContentVersionId });
             this.showToast('Success', 'Template and Version saved.', 'success');
             this.closeEditModal();
             return refreshApex(this.wiredTemplatesResult);
@@ -1538,6 +1539,7 @@ const VERSION_COLUMNS = [
             this.showToast('Success', 'File Uploaded: ' + file.name, 'success');
             this.currentFileId = file.documentId;
             this.uploadedFileName = file.name;
+            this.uploadedContentVersionId = file.contentVersionId || null;
         }
     }
 
@@ -1554,6 +1556,7 @@ const VERSION_COLUMNS = [
 
     resetForm() {
         this.uploadedFileName = '';
+        this.uploadedContentVersionId = null;
         this.currentWizardStep = '1';
         this.newTemplateName = '';
         this.newTemplateCategory = '';
